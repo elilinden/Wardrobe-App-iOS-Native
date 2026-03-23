@@ -64,22 +64,54 @@ struct TryOnView: View {
 
             if let profile {
                 if profile.canRender {
-                    Text("\(profile.rendersRemaining) renders remaining this month")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    let remaining = profile.rendersRemaining
 
                     Button(action: startRender) {
                         Label("Render Try-On", systemImage: "wand.and.stars")
                     }
                     .buttonStyle(GlassButtonStyle())
                     .padding(.horizontal, DS.spacingXL)
+
+                    if remaining <= 5 && !profile.hasUnlimitedRenders {
+                        HStack(spacing: DS.spacingXS) {
+                            Image(systemName: remaining <= 3 ? "exclamationmark.triangle.fill" : "info.circle")
+                                .foregroundStyle(remaining <= 3 ? .orange : .secondary)
+                                .font(.caption)
+                            Text("\(remaining) render\(remaining == 1 ? "" : "s") left this month")
+                                .font(.caption)
+                                .foregroundStyle(remaining <= 3 ? .orange : .secondary)
+                        }
+
+                        if remaining <= 3 {
+                            Button { showUpgrade = true } label: {
+                                Text("Unlock unlimited for $2.99")
+                                    .font(.caption)
+                                    .foregroundStyle(.accent)
+                            }
+                        }
+                    } else if !profile.hasUnlimitedRenders {
+                        Text("\(remaining) renders remaining this month")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
-                    Text("You've used all \(DS.monthlyRenderLimit) renders this month")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: DS.spacingSM) {
+                        Text("You've used all \(DS.monthlyRenderLimit) renders")
+                            .font(.subheadline)
+
+                        let resetDate = Calendar.current.date(
+                            from: Calendar.current.dateComponents([.year, .month], from: Date())
+                        ).flatMap { Calendar.current.date(byAdding: .month, value: 1, to: $0) }
+
+                        if let reset = resetDate {
+                            Text("Resets \(reset, format: .dateTime.month(.wide).day())")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     Button { showUpgrade = true } label: {
-                        Text("Unlock Unlimited — $2.99")
+                        Text("Unlock Unlimited Renders — $2.99 one-time")
                     }
                     .buttonStyle(GlassButtonStyle())
                     .padding(.horizontal, DS.spacingXL)

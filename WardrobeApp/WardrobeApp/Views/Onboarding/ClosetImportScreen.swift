@@ -8,7 +8,7 @@ struct ClosetImportScreen: View {
 
     var body: some View {
         VStack(spacing: DS.spacingXL) {
-            ProgressDots(step: 2, totalSteps: 3)
+            ProgressDots(step: 2, totalSteps: 4)
                 .padding(.top, DS.spacingLG)
 
             VStack(spacing: DS.spacingSM) {

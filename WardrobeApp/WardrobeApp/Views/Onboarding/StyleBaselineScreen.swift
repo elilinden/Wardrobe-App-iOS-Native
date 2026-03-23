@@ -5,6 +5,7 @@ struct StyleBaselineScreen: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    var onFinish: (() -> Void)? = nil
 
     @State private var dressesFor = "mix"
     @State private var excludedColors: Set<String> = []
@@ -20,14 +21,19 @@ struct StyleBaselineScreen: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: DS.spacingXXL) {
-                ProgressDots(step: 3, totalSteps: 3)
+                ProgressDots(step: 3, totalSteps: 4)
                     .padding(.top, DS.spacingLG)
 
-                Text("Style Baseline")
-                    .font(.title.weight(.bold))
+                VStack(spacing: DS.spacingSM) {
+                    Text("Style Baseline")
+                        .font(.title.weight(.bold))
+                    Text("These help us personalize your daily suggestions")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
 
                 VStack(spacing: DS.spacingXL) {
-                    questionSection("What do you mainly dress for?") {
+                    questionSection("What do you mainly dress for?", hint: "We'll prioritize outfits for these occasions") {
                         GlassChipSelector(
                             options: ["Work", "Casual", "Going out", "Mix of everything"],
                             values: ["work", "casual", "going_out", "mix"],
@@ -35,7 +41,7 @@ struct StyleBaselineScreen: View {
                         )
                     }
 
-                    questionSection("Any colors you never wear?") {
+                    questionSection("Any colors you never wear?", hint: "We'll avoid these in outfit suggestions") {
                         LazyVGrid(
                             columns: Array(repeating: GridItem(.flexible()), count: 5),
                             spacing: DS.spacingSM
@@ -55,7 +61,7 @@ struct StyleBaselineScreen: View {
                         }
                     }
 
-                    questionSection("How would you describe your style?") {
+                    questionSection("How would you describe your style?", hint: "Shapes which items we pair together") {
                         GlassChipSelector(
                             options: ["Minimal", "Classic", "Streetwear", "Feminine", "Eclectic", "Still figuring it out"],
                             values: ["minimal", "classic", "streetwear", "feminine", "eclectic", "figuring_out"],
@@ -63,7 +69,7 @@ struct StyleBaselineScreen: View {
                         )
                     }
 
-                    questionSection("How much time on outfit decisions?") {
+                    questionSection("How much time on outfit decisions?", hint: "Quick = fewer choices; exploratory = more options") {
                         GlassChipSelector(
                             options: ["Under 1 min", "A few minutes", "I like exploring"],
                             values: ["under_1_min", "few_minutes", "like_exploring"],
@@ -71,7 +77,7 @@ struct StyleBaselineScreen: View {
                         )
                     }
 
-                    questionSection("Morning outfit suggestions?") {
+                    questionSection("Morning outfit suggestions?", hint: "Get a notification with today's outfit pick") {
                         GlassChipSelector(
                             options: ["Yes, notify me", "Yes, I'll check", "No thanks"],
                             values: ["notify", "check_manually", "no"],
@@ -91,10 +97,17 @@ struct StyleBaselineScreen: View {
         }
     }
 
-    private func questionSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func questionSection<Content: View>(_ title: String, hint: String? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: DS.spacingMD) {
-            Text(title)
-                .font(.headline)
+            VStack(alignment: .leading, spacing: DS.spacingXS) {
+                Text(title)
+                    .font(.headline)
+                if let hint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
             content()
         }
     }
@@ -128,6 +141,11 @@ struct StyleBaselineScreen: View {
         try? modelContext.save()
 
         Haptic.success()
-        appState.hasCompletedOnboarding = true
+
+        if let onFinish {
+            onFinish() // Go to walkthrough step
+        } else {
+            appState.hasCompletedOnboarding = true // Direct from Settings re-run
+        }
     }
 }

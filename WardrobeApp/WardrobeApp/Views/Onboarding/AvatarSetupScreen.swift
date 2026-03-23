@@ -31,7 +31,7 @@ struct AvatarSetupScreen: View {
 
     var body: some View {
         VStack(spacing: DS.spacingXL) {
-            ProgressDots(step: 1, totalSteps: 3)
+            ProgressDots(step: 1, totalSteps: 4)
                 .padding(.top, DS.spacingLG)
 
             VStack(spacing: DS.spacingSM) {

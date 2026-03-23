@@ -120,7 +120,10 @@ struct TripSetupView: View {
                 VStack(spacing: DS.spacingXL) {
                     VStack(spacing: DS.spacingMD) {
                         VStack(alignment: .leading, spacing: DS.spacingSM) {
-                            Text("Destination").font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                Text("Destination").font(.caption).foregroundStyle(.secondary)
+                                Text("Required").font(.caption2).foregroundStyle(.red)
+                            }
                             TextField("City or country", text: $destination)
                                 .textFieldStyle(.roundedBorder)
                         }
@@ -137,7 +140,12 @@ struct TripSetupView: View {
                     .glassCard()
 
                     VStack(alignment: .leading, spacing: DS.spacingMD) {
-                        Text("Activities").font(.headline)
+                        VStack(alignment: .leading, spacing: DS.spacingXS) {
+                            Text("Activities").font(.headline)
+                            Text("Optional — select to personalize your packing list")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         GlassMultiChipSelector(
                             options: Activity.allCases.map { ($0.displayName, $0) },
                             selected: $selectedActivities
@@ -220,7 +228,13 @@ struct PackingResultsView: View {
     @Bindable var trip: PackingTrip
     let allItems: [WardrobeItem]
     @Environment(\.dismiss) private var dismiss
-    @State private var showChecklist = false
+    @State private var viewMode: PackingViewMode = .detail
+    @State private var checkedItems: Set<UUID> = []
+
+    enum PackingViewMode: String, CaseIterable {
+        case detail = "Detail"
+        case checklist = "Checklist"
+    }
 
     private var packedItems: [WardrobeItem] {
         trip.packedItemIDs.compactMap { id in allItems.first { $0.id == id } }
@@ -237,15 +251,36 @@ struct PackingResultsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                HStack {
-                    Toggle("Checklist Mode", isOn: $showChecklist)
-                        .font(.subheadline)
+                // Segmented mode picker
+                Picker("View", selection: $viewMode) {
+                    ForEach(PackingViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
+                .pickerStyle(.segmented)
                 .padding(.horizontal, DS.spacingLG)
                 .padding(.vertical, DS.spacingSM)
 
-                if showChecklist {
-                    checklistView
+                if viewMode == .checklist {
+                    VStack {
+                        checklistView
+
+                        // Packed count summary
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Packed \(checkedItems.count) of \(packedItems.count) items")
+                                .font(.subheadline.weight(.medium))
+                            Spacer()
+                            if checkedItems.count == packedItems.count && !packedItems.isEmpty {
+                                Text("All packed!")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                        .padding(DS.spacingLG)
+                        .glassBackground(cornerRadius: 0)
+                    }
                 } else {
                     detailView
                 }
@@ -320,7 +355,7 @@ struct PackingResultsView: View {
             ForEach(grouped, id: \.0) { category, categoryItems in
                 Section(category.displayName) {
                     ForEach(categoryItems, id: \.id) { item in
-                        PackingChecklistRow(item: item)
+                        PackingChecklistRow(item: item, checkedItems: $checkedItems)
                     }
                 }
             }
@@ -332,12 +367,18 @@ struct PackingResultsView: View {
 
 struct PackingChecklistRow: View {
     let item: WardrobeItem
-    @State private var isChecked = false
+    @Binding var checkedItems: Set<UUID>
+
+    private var isChecked: Bool { checkedItems.contains(item.id) }
 
     var body: some View {
         HStack(spacing: DS.spacingMD) {
             Button {
-                isChecked.toggle()
+                if isChecked {
+                    checkedItems.remove(item.id)
+                } else {
+                    checkedItems.insert(item.id)
+                }
                 Haptic.light()
             } label: {
                 Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")

@@ -46,6 +46,17 @@ struct AddItemMenuView: View {
     }
 }
 
+// MARK: - Common Subcategory Suggestions
+
+private let subcategorySuggestions: [Category: [String]] = [
+    .top: ["T-Shirt", "Blouse", "Button-Down", "Sweater", "Tank Top", "Polo", "Hoodie", "Crop Top", "Henley", "Turtleneck"],
+    .bottom: ["Jeans", "Chinos", "Trousers", "Shorts", "Skirt", "Leggings", "Joggers", "Cargo Pants", "Dress Pants"],
+    .dress: ["Maxi Dress", "Mini Dress", "Midi Dress", "Sundress", "Cocktail Dress", "Wrap Dress", "Shift Dress"],
+    .outerwear: ["Jacket", "Blazer", "Coat", "Cardigan", "Puffer", "Windbreaker", "Denim Jacket", "Leather Jacket", "Trench Coat"],
+    .shoes: ["Sneakers", "Boots", "Sandals", "Loafers", "Heels", "Flats", "Oxford", "Running Shoes", "Slides"],
+    .accessory: ["Watch", "Necklace", "Earrings", "Belt", "Hat", "Sunglasses", "Scarf", "Bracelet", "Ring", "Bag"]
+]
+
 // MARK: - Single Item
 
 struct AddItemSingleView: View {
@@ -55,6 +66,7 @@ struct AddItemSingleView: View {
     @State private var capturedImage: UIImage?
     @State private var showCamera = true
     @State private var isProcessing = false
+    @State private var autoTagged = false
     @State private var errorMessage: String?
 
     @State private var category: Category = .top
@@ -71,9 +83,16 @@ struct AddItemSingleView: View {
             Group {
                 if showCamera {
                     VStack {
-                        Text("Fill the frame with the item")
-                            .font(.headline)
-                            .padding()
+                        HStack {
+                            Image(systemName: "lightbulb.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Fill the frame with the item against a plain background")
+                                .font(.subheadline)
+                        }
+                        .padding()
+                        .glassBackground(cornerRadius: DS.radiusMD)
+                        .padding(.horizontal)
+
                         ImagePicker(image: $capturedImage, sourceType: .camera)
                     }
                     .onChange(of: capturedImage) { _, newVal in
@@ -83,7 +102,7 @@ struct AddItemSingleView: View {
                         }
                     }
                 } else if isProcessing {
-                    GlassProgressView(title: "Analyzing your item...", subtitle: "Removing background & auto-tagging")
+                    GlassProgressView(title: "Analyzing your item...", subtitle: "Removing background & detecting details")
                 } else {
                     reviewForm
                 }
@@ -106,39 +125,80 @@ struct AddItemSingleView: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxHeight: 220)
+                        .frame(maxHeight: 200)
                         .clipShape(RoundedRectangle(cornerRadius: DS.radiusLG))
                         .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
                 }
 
                 if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .glassCard(cornerRadius: DS.radiusMD)
+                    HStack(spacing: DS.spacingSM) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(.caption)
+                    }
+                    .glassCard(cornerRadius: DS.radiusMD)
                 }
 
+                // Quick accept if auto-tagged
+                if autoTagged {
+                    Button(action: saveItem) {
+                        Label("Looks Good — Add to Closet", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(GlassButtonStyle())
+
+                    Text("or edit details below")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Editable fields
                 VStack(spacing: DS.spacingMD) {
                     Picker("Category", selection: $category) {
                         ForEach(Category.allCases) { c in Text(c.displayName).tag(c) }
                     }
+                    .onChange(of: category) { _, _ in
+                        if subcategory.isEmpty || !currentSuggestions.map({ $0.lowercased() }).contains(subcategory.lowercased()) {
+                            subcategory = ""
+                        }
+                    }
 
-                    HStack {
-                        Text("Subcategory")
-                        Spacer()
-                        TextField("e.g. t-shirt, blazer", text: $subcategory)
-                            .multilineTextAlignment(.trailing)
+                    // Subcategory with suggestions
+                    VStack(alignment: .leading, spacing: DS.spacingSM) {
+                        HStack {
+                            Text("Type")
+                            Spacer()
+                            TextField("e.g. t-shirt", text: $subcategory)
+                                .multilineTextAlignment(.trailing)
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: DS.spacingXS) {
+                                ForEach(currentSuggestions, id: \.self) { suggestion in
+                                    Button {
+                                        subcategory = suggestion.lowercased()
+                                        Haptic.selection()
+                                    } label: {
+                                        Text(suggestion)
+                                            .font(.caption)
+                                            .glassPill(isSelected: subcategory.lowercased() == suggestion.lowercased())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
                     }
 
                     HStack {
-                        Text("Primary Color")
+                        Text("Color")
                         Spacer()
-                        TextField("Color", text: $primaryColor)
+                        TextField("Primary color", text: $primaryColor)
                             .multilineTextAlignment(.trailing)
                     }
 
                     HStack {
                         Text("Secondary Color")
+                            .foregroundStyle(.secondary)
                         Spacer()
                         TextField("Optional", text: $secondaryColor)
                             .multilineTextAlignment(.trailing)
@@ -158,13 +218,19 @@ struct AddItemSingleView: View {
                 }
                 .glassCard()
 
-                Button(action: saveItem) {
-                    Text("Add to Closet")
+                if !autoTagged {
+                    Button(action: saveItem) {
+                        Text("Add to Closet")
+                    }
+                    .buttonStyle(GlassButtonStyle())
                 }
-                .buttonStyle(GlassButtonStyle())
             }
             .padding(DS.spacingLG)
         }
+    }
+
+    private var currentSuggestions: [String] {
+        subcategorySuggestions[category] ?? []
     }
 
     private func processImage() {
@@ -186,11 +252,13 @@ struct AddItemSingleView: View {
                     material = Material(rawValue: result.materialEstimate) ?? .unknown
                     formality = Formality(rawValue: result.formality) ?? .casual
                     selectedSeasons = Set(result.season.compactMap { Season(rawValue: $0) })
+                    autoTagged = true
                     isProcessing = false
                 }
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
+                    autoTagged = false
                     isProcessing = false
                 }
             }
@@ -200,8 +268,8 @@ struct AddItemSingleView: View {
     private func saveItem() {
         let item = WardrobeItem(
             category: category,
-            subcategory: subcategory,
-            primaryColor: primaryColor,
+            subcategory: subcategory.isEmpty ? category.rawValue : subcategory,
+            primaryColor: primaryColor.isEmpty ? "Unknown" : primaryColor,
             secondaryColor: secondaryColor.isEmpty ? nil : secondaryColor,
             pattern: pattern,
             materialEstimate: material,
@@ -216,6 +284,9 @@ struct AddItemSingleView: View {
         modelContext.insert(item)
         try? modelContext.save()
         Haptic.success()
+
+        // Post notification for toast
+        NotificationCenter.default.post(name: .itemAdded, object: item.displayName)
         dismiss()
     }
 }
@@ -248,10 +319,16 @@ struct AddItemBatchView: View {
             Group {
                 if showCamera {
                     VStack {
-                        Text("Lay clothes flat and photograph the pile")
-                            .font(.headline)
-                            .multilineTextAlignment(.center)
-                            .padding()
+                        HStack {
+                            Image(systemName: "lightbulb.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Lay clothes flat with space between items")
+                                .font(.subheadline)
+                        }
+                        .padding()
+                        .glassBackground(cornerRadius: DS.radiusMD)
+                        .padding(.horizontal)
+
                         ImagePicker(image: $capturedImage, sourceType: .camera)
                     }
                     .onChange(of: capturedImage) { _, newVal in
@@ -261,7 +338,17 @@ struct AddItemBatchView: View {
                         }
                     }
                 } else if isProcessing {
-                    GlassProgressView(title: "Finding your clothes...", subtitle: "Detecting and separating items")
+                    GlassProgressView(title: "Finding your clothes...", subtitle: "Detecting and separating each item")
+                } else if detectedItems.isEmpty && errorMessage != nil {
+                    VStack(spacing: DS.spacingLG) {
+                        EmptyStateView(
+                            icon: "exclamationmark.triangle",
+                            title: "Couldn't detect items",
+                            subtitle: errorMessage ?? "Try again with better lighting.",
+                            actionTitle: "Try Again",
+                            action: { showCamera = true; capturedImage = nil }
+                        )
+                    }
                 } else {
                     reviewGrid
                 }
@@ -278,10 +365,23 @@ struct AddItemBatchView: View {
     }
 
     private var reviewGrid: some View {
-        VStack {
-            if let error = errorMessage {
-                Text(error).foregroundStyle(.orange).font(.caption).padding()
+        VStack(spacing: 0) {
+            // Header with select all
+            HStack {
+                let count = detectedItems.filter(\.isSelected).count
+                Text("\(count) of \(detectedItems.count) selected")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(count == detectedItems.count ? "Deselect All" : "Select All") {
+                    let newState = count < detectedItems.count
+                    for i in detectedItems.indices { detectedItems[i].isSelected = newState }
+                    Haptic.selection()
+                }
+                .font(.caption.weight(.medium))
             }
+            .padding(.horizontal, DS.spacingLG)
+            .padding(.vertical, DS.spacingSM)
 
             ScrollView {
                 LazyVGrid(columns: DS.gridColumns2, spacing: DS.spacingMD) {
@@ -303,8 +403,9 @@ struct AddItemBatchView: View {
                                             .padding(DS.spacingXS)
                                     }
                                 }
+                                .opacity(item.isSelected ? 1 : 0.5)
 
-                            Text(item.category.displayName).font(.caption)
+                            Text(item.category.displayName).font(.caption.weight(.medium))
                             Text(item.primaryColor).font(.caption2).foregroundStyle(.secondary)
                         }
                         .glassCard(cornerRadius: DS.radiusMD)
@@ -315,7 +416,7 @@ struct AddItemBatchView: View {
 
             let count = detectedItems.filter(\.isSelected).count
             Button { saveItems() } label: {
-                Text("Add \(count) items to Closet")
+                Text("Add \(count) item\(count == 1 ? "" : "s") to Closet")
             }
             .buttonStyle(GlassButtonStyle())
             .disabled(count == 0)
@@ -357,6 +458,9 @@ struct AddItemBatchView: View {
                 await MainActor.run {
                     detectedItems = detected
                     isProcessing = false
+                    if detected.isEmpty {
+                        errorMessage = "No items detected. Try with better lighting or spacing."
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -368,7 +472,8 @@ struct AddItemBatchView: View {
     }
 
     private func saveItems() {
-        for d in detectedItems where d.isSelected {
+        let selected = detectedItems.filter(\.isSelected)
+        for d in selected {
             let item = WardrobeItem(
                 category: d.category,
                 subcategory: d.category.rawValue,
@@ -382,6 +487,7 @@ struct AddItemBatchView: View {
         }
         try? modelContext.save()
         Haptic.success()
+        NotificationCenter.default.post(name: .itemAdded, object: "\(selected.count) items")
         dismiss()
     }
 }
@@ -396,22 +502,46 @@ struct OnlineSearchView: View {
         NavigationStack {
             VStack(spacing: DS.spacingXL) {
                 Spacer()
-                EmptyStateView(
-                    icon: "magnifyingglass",
-                    title: "Search Online",
-                    subtitle: "Search for clothing items by brand and name. This feature requires a product image search API integration."
-                )
+
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 100, height: 100)
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(spacing: DS.spacingSM) {
+                    Text("Coming Soon")
+                        .font(.title3.weight(.semibold))
+                    Text("Search clothing by brand and name to import product images directly.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, DS.spacingXXL)
+                }
+
+                Text("Use Single Item or Batch Photo for now")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
                 Spacer()
             }
             .background { MeshGradientBackground() }
-            .searchable(text: $searchQuery, prompt: "e.g. Zara linen blazer cream")
             .navigationTitle("Search Online")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }
+                    Button("Done") { dismiss() }
                 }
             }
         }
     }
+}
+
+// MARK: - Notification Name
+
+extension Notification.Name {
+    static let itemAdded = Notification.Name("itemAdded")
 }

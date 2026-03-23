@@ -3,6 +3,7 @@ import SwiftData
 
 struct BuilderView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
     @Query(filter: #Predicate<WardrobeItem> { !$0.isWishlist }) private var allItems: [WardrobeItem]
 
     @State private var selectedTop: WardrobeItem?
@@ -96,9 +97,12 @@ struct BuilderView: View {
                     Image(systemName: "square.stack.3d.up")
                         .font(.system(size: 44))
                         .foregroundStyle(.quaternary)
-                    Text("Select items below to build an outfit")
+                    Text("Pick one item per category below")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Text("Top + Bottom + Shoes, or Dress + Shoes")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
             } else {
                 HStack(spacing: DS.spacingSM) {
@@ -123,11 +127,19 @@ struct BuilderView: View {
         }
         .overlay(alignment: .topTrailing) {
             if !selectedItems.isEmpty {
-                Button { showTryOn = true } label: {
-                    Label("Try On", systemImage: "person.fill")
-                        .font(.caption.weight(.medium))
+                VStack(spacing: DS.spacingSM) {
+                    Button { showTryOn = true } label: {
+                        Label("Try On", systemImage: "person.fill")
+                            .font(.caption.weight(.medium))
+                    }
+                    .glassPill(isSelected: true)
+
+                    Button { clearAll() } label: {
+                        Label("Clear", systemImage: "arrow.counterclockwise")
+                            .font(.caption2.weight(.medium))
+                    }
+                    .glassPill()
                 }
-                .glassPill(isSelected: true)
                 .padding(DS.spacingMD)
             }
         }
@@ -150,11 +162,19 @@ struct BuilderView: View {
             }
 
             if categoryItems.isEmpty {
-                VStack {
+                VStack(spacing: DS.spacingSM) {
                     Spacer()
-                    Text("No \(activeCategory.displayName.lowercased()) available")
+                    Image(systemName: activeCategory.icon)
+                        .font(.title)
+                        .foregroundStyle(.quaternary)
+                    Text("No \(activeCategory.displayName.lowercased()) in your closet")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Button("Add from Closet") {
+                        appState.selectedTab = 0
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.accent)
                     Spacer()
                 }
             } else {
@@ -216,12 +236,28 @@ struct BuilderView: View {
         selectedItems.contains { $0.id == item.id }
     }
 
+    private func clearAll() {
+        selectedTop = nil
+        selectedBottom = nil
+        selectedDress = nil
+        selectedOuterwear = nil
+        selectedShoes = nil
+        selectedAccessories = []
+        Haptic.light()
+    }
+
     private func selectItem(_ item: WardrobeItem) {
         Haptic.selection()
         switch item.category {
-        case .top: selectedTop = selectedTop?.id == item.id ? nil : item
-        case .bottom: selectedBottom = selectedBottom?.id == item.id ? nil : item
-        case .dress: selectedDress = selectedDress?.id == item.id ? nil : item
+        case .top:
+            selectedTop = selectedTop?.id == item.id ? nil : item
+            if selectedTop != nil { selectedDress = nil } // Can't have dress + top
+        case .bottom:
+            selectedBottom = selectedBottom?.id == item.id ? nil : item
+            if selectedBottom != nil { selectedDress = nil } // Can't have dress + bottom
+        case .dress:
+            selectedDress = selectedDress?.id == item.id ? nil : item
+            if selectedDress != nil { selectedTop = nil; selectedBottom = nil } // Dress replaces top+bottom
         case .outerwear: selectedOuterwear = selectedOuterwear?.id == item.id ? nil : item
         case .shoes: selectedShoes = selectedShoes?.id == item.id ? nil : item
         case .accessory:

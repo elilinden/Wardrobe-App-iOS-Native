@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OnboardingFlow: View {
+    @EnvironmentObject private var appState: AppState
     @State private var currentStep = 0
 
     var body: some View {
@@ -12,7 +13,10 @@ struct OnboardingFlow: View {
                 case 0: WelcomeScreen { currentStep = 1 }
                 case 1: AvatarSetupScreen { currentStep = 2 }
                 case 2: ClosetImportScreen { currentStep = 3 }
-                case 3: StyleBaselineScreen()
+                case 3: StyleBaselineScreen(onFinish: { currentStep = 4 })
+                case 4: WalkthroughView(isPresented: .constant(true)) {
+                    appState.hasCompletedOnboarding = true
+                }
                 default: WelcomeScreen { currentStep = 1 }
                 }
             }

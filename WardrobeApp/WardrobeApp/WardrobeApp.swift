@@ -4,10 +4,14 @@ import SwiftData
 @main
 struct WardrobeApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var authService = AuthService()
 
     let modelContainer: ModelContainer
 
     init() {
+        // Initialize Keychain API key manager on launch
+        _ = APIKeyManager.shared
+
         do {
             let schema = Schema([
                 WardrobeItem.self,
@@ -31,6 +35,7 @@ struct WardrobeApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
+                .environmentObject(authService)
                 .modelContainer(modelContainer)
         }
     }

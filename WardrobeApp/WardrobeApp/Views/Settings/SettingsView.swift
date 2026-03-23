@@ -7,8 +7,11 @@ struct SettingsView: View {
     @Query private var profiles: [UserProfile]
     @StateObject private var store = StoreKitService()
 
+    @EnvironmentObject private var authService: AuthService
+
     @State private var showDeleteConfirmation = false
     @State private var showStyleBaseline = false
+    @State private var showWalkthrough = false
     @State private var isRetagging = false
     @State private var retagProgress = 0
     @State private var retagTotal = 0
@@ -18,12 +21,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                userAccountSection
                 accountSection
                 avatarSection
                 notificationSection
                 suggestionSection
                 tryOnSection
                 styleSection
+                helpSection
                 privacySection
                 aboutSection
             }
@@ -52,13 +57,96 @@ struct SettingsView: View {
                         }
                 }
             }
+            .fullScreenCover(isPresented: $showWalkthrough) {
+                WalkthroughView(isPresented: $showWalkthrough)
+            }
         }
     }
 
-    // MARK: - Account
+    // MARK: - Preset Helpers
+
+    private func weatherPresetButton(_ label: String, value: Float, profile: UserProfile) -> some View {
+        let isSelected = abs(profile.weatherSensitivity - value) < 0.15
+        return Button {
+            profile.weatherSensitivity = value
+            Haptic.selection()
+        } label: {
+            Text(label)
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color.accentColor : .ultraThinMaterial)
+                .foregroundStyle(isSelected ? .white : .primary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.radiusSM))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func rewearPresetButton(_ label: String, value: Int, profile: UserProfile) -> some View {
+        let isSelected = profile.reWearGapDays == value
+        return Button {
+            profile.reWearGapDays = value
+            Haptic.selection()
+        } label: {
+            Text(label)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.accentColor : .ultraThinMaterial)
+                .foregroundStyle(isSelected ? .white : .primary)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - User Account
+
+    private var userAccountSection: some View {
+        Section {
+            if authService.isSignedIn, let user = authService.currentUser {
+                HStack(spacing: DS.spacingMD) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.15))
+                            .frame(width: 48, height: 48)
+                        Text(user.initials)
+                            .font(.headline)
+                            .foregroundStyle(.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: DS.spacingXS) {
+                        Text(user.displayName)
+                            .font(.headline)
+                        if let email = user.email {
+                            Text(email)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Button("Sign Out", role: .destructive) {
+                    authService.signOut()
+                }
+            } else {
+                VStack(alignment: .leading, spacing: DS.spacingSM) {
+                    Text("Sign in to sync across devices")
+                        .font(.subheadline)
+                    Text("Your data is always stored locally. Sign in to back up with iCloud.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                SignInWithAppleButton()
+            }
+        }
+        .listRowBackground(Color(.systemBackground).opacity(0.5))
+    }
+
+    // MARK: - Data Management
 
     private var accountSection: some View {
-        Section("Account") {
+        Section("Data") {
             if let profile {
                 Toggle("iCloud Sync", isOn: Binding(
                     get: { profile.iCloudSyncEnabled },
@@ -162,31 +250,33 @@ struct SettingsView: View {
     // MARK: - Suggestions
 
     private var suggestionSection: some View {
-        Section("Suggestions") {
+        Section {
             if let profile {
                 VStack(alignment: .leading, spacing: DS.spacingSM) {
-                    Text("Weather Sensitivity: \(Int(profile.weatherSensitivity * 100))%")
+                    Text("How much should weather affect suggestions?")
                         .font(.subheadline)
-                    Slider(
-                        value: Binding(
-                            get: { Double(profile.weatherSensitivity) },
-                            set: { profile.weatherSensitivity = Float($0) }
-                        ), in: 0...1
-                    )
-                    .tint(.accentColor)
+                    HStack(spacing: DS.spacingSM) {
+                        weatherPresetButton("Low", value: 0.2, profile: profile)
+                        weatherPresetButton("Medium", value: 0.5, profile: profile)
+                        weatherPresetButton("High", value: 0.9, profile: profile)
+                    }
+                    Text("Higher = more seasonal outfits")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
 
                 VStack(alignment: .leading, spacing: DS.spacingSM) {
-                    Text("Re-wear Gap: \(profile.reWearGapDays) days")
+                    Text("Days before re-suggesting an outfit")
                         .font(.subheadline)
-                    Slider(
-                        value: Binding(
-                            get: { Double(profile.reWearGapDays) },
-                            set: { profile.reWearGapDays = Int($0) }
-                        ),
-                        in: DS.reWearGapRange, step: 1
-                    )
-                    .tint(.accentColor)
+                    HStack(spacing: DS.spacingSM) {
+                        rewearPresetButton("3 days", value: 3, profile: profile)
+                        rewearPresetButton("7 days", value: 7, profile: profile)
+                        rewearPresetButton("14 days", value: 14, profile: profile)
+                        rewearPresetButton("21 days", value: 21, profile: profile)
+                    }
+                    Text("Shorter = more outfit repeats; longer = more variety")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
 
                 Button {
@@ -246,6 +336,25 @@ struct SettingsView: View {
     private var styleSection: some View {
         Section("Style Baseline") {
             Button("Re-run Style Questions") { showStyleBaseline = true }
+        }
+        .listRowBackground(Color(.systemBackground).opacity(0.5))
+    }
+
+    // MARK: - Help & Tutorial
+
+    private var helpSection: some View {
+        Section("Help") {
+            Button {
+                showWalkthrough = true
+            } label: {
+                Label("App Tutorial", systemImage: "questionmark.circle")
+            }
+
+            NavigationLink {
+                TipsView()
+            } label: {
+                Label("Tips & Tricks", systemImage: "lightbulb")
+            }
         }
         .listRowBackground(Color(.systemBackground).opacity(0.5))
     }

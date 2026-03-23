@@ -3,6 +3,7 @@ import SwiftData
 
 struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
     @Query(filter: #Predicate<WardrobeItem> { !$0.isWishlist }) private var items: [WardrobeItem]
     @Query private var outfits: [Outfit]
     @Query private var profiles: [UserProfile]
@@ -14,6 +15,7 @@ struct TodayView: View {
     @State private var selectedMood: Mood?
     @State private var suggestions: [OutfitSuggestion] = []
     @State private var showSettings = false
+    @State private var toastMessage: ToastMessage?
 
     private let engine = SuggestionEngine()
     private var profile: UserProfile? { profiles.first }
@@ -40,6 +42,7 @@ struct TodayView: View {
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .toast($toastMessage)
             .onAppear {
                 weatherService.requestLocation()
                 Task { await calendarService.requestAccess() }
@@ -156,11 +159,47 @@ struct TodayView: View {
     @ViewBuilder
     private var suggestionsSection: some View {
         if items.count < 3 {
-            EmptyStateView(
-                icon: "sun.max",
-                title: "Add some clothes first",
-                subtitle: "We need at least 3 items to suggest outfits."
-            )
+            VStack(spacing: DS.spacingLG) {
+                Spacer()
+
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 120, height: 120)
+                    Image(systemName: "sun.max")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(spacing: DS.spacingSM) {
+                    Text("Add \(3 - items.count) more item\(items.count == 2 ? "" : "s") to get suggestions")
+                        .font(.title3.weight(.semibold))
+
+                    // Progress bar
+                    HStack(spacing: DS.spacingXS) {
+                        ForEach(0..<3, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(i < items.count ? Color.accentColor : Color.primary.opacity(0.1))
+                                .frame(height: 6)
+                        }
+                    }
+                    .padding(.horizontal, 60)
+
+                    Text("\(items.count) of 3 items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    appState.selectedTab = 0 // Go to Closet
+                } label: {
+                    Label("Go to Closet", systemImage: "tshirt")
+                }
+                .buttonStyle(GlassButtonStyle())
+                .padding(.horizontal, 60)
+
+                Spacer()
+            }
         } else if suggestions.isEmpty {
             GlassProgressView(title: "Generating suggestions...")
         } else {
@@ -195,13 +234,16 @@ struct TodayView: View {
 
     private func thumbsUp(_ s: OutfitSuggestion) {
         Haptic.light()
-        // Positive signal - could be used for ML later
+        toastMessage = .success("Noted! We'll suggest more like this")
     }
 
     private func thumbsDown(_ s: OutfitSuggestion) {
         profile?.addThumbsDown(itemIDs: Set(s.items.map(\.id)))
         try? modelContext.save()
-        generateSuggestions()
+        toastMessage = .info("Got it — we'll avoid this combo")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation { generateSuggestions() }
+        }
         Haptic.light()
     }
 
@@ -209,6 +251,7 @@ struct TodayView: View {
         let outfit = Outfit(itemIDs: s.items.map(\.id), occasion: selectedOccasion)
         modelContext.insert(outfit)
         try? modelContext.save()
+        toastMessage = .success("Outfit saved to Lookbook")
         Haptic.success()
     }
 }

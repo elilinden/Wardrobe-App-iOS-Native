@@ -3,6 +3,7 @@ import SwiftData
 
 enum ClosetSegment: String, CaseIterable {
     case myCloset = "My Closet"
+    case browse = "Browse"
     case wishlist = "Wishlist"
 }
 
@@ -38,6 +39,7 @@ struct ClosetView: View {
     @State private var showAddItem = false
     @State private var showSettings = false
     @State private var selectedItem: WardrobeItem?
+    @State private var toastMessage: ToastMessage?
 
     // Filters
     @State private var filterCategories: Set<Category> = []
@@ -53,7 +55,10 @@ struct ClosetView: View {
     }
 
     private var currentItems: [WardrobeItem] {
-        allItems.filter { segment == .myCloset ? !$0.isWishlist : $0.isWishlist }
+        switch segment {
+        case .myCloset, .browse: return allItems.filter { !$0.isWishlist }
+        case .wishlist: return allItems.filter { $0.isWishlist }
+        }
     }
 
     private var filteredItems: [WardrobeItem] {
@@ -97,8 +102,15 @@ struct ClosetView: View {
                         nudgeBanner
                     }
 
+                    // Active filter banner
+                    if hasActiveFilters {
+                        activeFilterBanner
+                    }
+
                     // Content
-                    if filteredItems.isEmpty {
+                    if segment == .browse {
+                        ClosetBrowseView()
+                    } else if filteredItems.isEmpty {
                         EmptyStateView(
                             icon: segment == .myCloset ? "tshirt" : "heart",
                             title: segment == .myCloset ? "Your wardrobe starts here." : "Your wishlist is empty.",
@@ -132,8 +144,13 @@ struct ClosetView: View {
             .sheet(isPresented: $showAddItem) { AddItemMenuView() }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(item: $selectedItem) { item in ItemDetailView(item: item) }
+            .toast($toastMessage)
             .onAppear {
                 appState.closetItemCount = allItems.filter { !$0.isWishlist }.count
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .itemAdded)) { notification in
+                let name = notification.object as? String ?? "Item"
+                toastMessage = .success("\(name) added to closet")
             }
         }
     }
@@ -191,6 +208,52 @@ struct ClosetView: View {
         .glassBackground(cornerRadius: DS.radiusMD)
         .padding(.horizontal, DS.spacingLG)
         .padding(.bottom, DS.spacingSM)
+    }
+
+    // MARK: - Active Filter Banner
+
+    private var activeFilterBanner: some View {
+        HStack(spacing: DS.spacingSM) {
+            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                .foregroundStyle(.accent)
+                .font(.caption)
+
+            let filterNames = activeFilterNames
+            Text("Filtered: \(filterNames)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Button {
+                filterCategories.removeAll()
+                filterColors.removeAll()
+                filterSeasons.removeAll()
+                filterFormalities.removeAll()
+                filterConditions.removeAll()
+                Haptic.light()
+            } label: {
+                Text("Clear")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.accent)
+            }
+        }
+        .padding(DS.spacingMD)
+        .glassBackground(cornerRadius: DS.radiusMD)
+        .padding(.horizontal, DS.spacingLG)
+        .padding(.bottom, DS.spacingSM)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    private var activeFilterNames: String {
+        var names: [String] = []
+        if !filterCategories.isEmpty { names.append(filterCategories.map(\.displayName).joined(separator: ", ")) }
+        if !filterColors.isEmpty { names.append(filterColors.map(\.capitalized).joined(separator: ", ")) }
+        if !filterSeasons.isEmpty { names.append(filterSeasons.map(\.displayName).joined(separator: ", ")) }
+        if !filterFormalities.isEmpty { names.append(filterFormalities.map(\.displayName).joined(separator: ", ")) }
+        if !filterConditions.isEmpty { names.append(filterConditions.map(\.displayName).joined(separator: ", ")) }
+        return names.joined(separator: " · ")
     }
 
     // MARK: - Grid
