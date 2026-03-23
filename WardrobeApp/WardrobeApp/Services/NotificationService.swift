@@ -7,14 +7,19 @@ class NotificationService {
     private let center = UNUserNotificationCenter.current()
 
     func requestPermission() async -> Bool {
+        AppLog.notifications.info("Requesting notification permission")
         do {
-            return try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            AppLog.notifications.info("Notification permission: \(granted ? "granted" : "denied")")
+            return granted
         } catch {
+            AppLog.notifications.error("Notification permission error: \(error.localizedDescription)")
             return false
         }
     }
 
     func scheduleMorningSuggestion(hour: Int, minute: Int) {
+        AppLog.notifications.info("Scheduling morning suggestion at \(hour):\(minute)")
         let id = "morning_outfit_suggestion"
         center.removePendingNotificationRequests(withIdentifiers: [id])
 

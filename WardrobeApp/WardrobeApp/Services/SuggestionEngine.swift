@@ -26,7 +26,9 @@ class SuggestionEngine {
         reWearGapDays: Int,
         weatherSensitivity: Float
     ) -> [OutfitSuggestion] {
+        AppLog.suggestions.info("Generating suggestions from \(allItems.count) items")
         let available = allItems.filter { $0.condition.isAvailable && !$0.isWishlist }
+        AppLog.suggestions.debug("\(available.count) available items after filtering")
 
         let tops = available.filter { $0.category == .top }.shuffled()
         let bottoms = available.filter { $0.category == .bottom }.shuffled()
@@ -79,7 +81,9 @@ class SuggestionEngine {
         }
 
         suggestions.sort { $0.score > $1.score }
-        return Array(suggestions.prefix(3))
+        let result = Array(suggestions.prefix(3))
+        AppLog.suggestions.info("Generated \(result.count) suggestions from \(combinationCount) combinations scored")
+        return result
     }
 
     // MARK: - Scoring

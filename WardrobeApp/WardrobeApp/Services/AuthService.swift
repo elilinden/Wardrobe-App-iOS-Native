@@ -35,6 +35,7 @@ class AuthService: ObservableObject {
     // MARK: - Sign In with Apple
 
     func handleSignInResult(_ result: Result<ASAuthorization, Error>) {
+        AppLog.auth.info("Processing Sign In with Apple result")
         switch result {
         case .success(let auth):
             guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else { return }
@@ -55,14 +56,17 @@ class AuthService: ObservableObject {
             currentUser = account
             isSignedIn = true
             saveUser(account)
+            AppLog.auth.info("Sign in successful for user: \(userID)")
             Haptic.success()
 
-        case .failure:
+        case .failure(let error):
+            AppLog.auth.error("Sign in failed: \(error.localizedDescription)")
             Haptic.error()
         }
     }
 
     func signOut() {
+        AppLog.auth.info("User signed out")
         currentUser = nil
         isSignedIn = false
         deleteUser()

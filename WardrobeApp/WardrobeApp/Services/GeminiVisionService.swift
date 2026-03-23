@@ -94,8 +94,13 @@ actor GeminiVisionService {
     }
 
     func tagSingleItem(image: UIImage) async throws -> GeminiTagResult {
-        guard !apiKey.isEmpty else { throw GeminiError.missingAPIKey }
+        AppLog.api.info("Gemini: Starting single item tagging")
+        guard !apiKey.isEmpty else {
+            AppLog.api.error("Gemini: API key missing")
+            throw GeminiError.missingAPIKey
+        }
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            AppLog.api.error("Gemini: Failed to compress image to JPEG")
             throw GeminiError.invalidImage
         }
 
@@ -117,7 +122,11 @@ actor GeminiVisionService {
     }
 
     func detectBatchItems(image: UIImage) async throws -> [GeminiBatchItem] {
-        guard !apiKey.isEmpty else { throw GeminiError.missingAPIKey }
+        AppLog.api.info("Gemini: Starting batch item detection")
+        guard !apiKey.isEmpty else {
+            AppLog.api.error("Gemini: API key missing")
+            throw GeminiError.missingAPIKey
+        }
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
             throw GeminiError.invalidImage
         }
@@ -162,19 +171,27 @@ actor GeminiVisionService {
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         request.timeoutInterval = 30
 
+        AppLog.api.debug("Gemini: Sending request with \(imageData.count) bytes image data")
         let (responseData, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            AppLog.api.error("Gemini: Invalid HTTP response")
             throw GeminiError.apiError(statusCode: 0)
         }
+
+        AppLog.api.info("Gemini: Response status \(httpResponse.statusCode)")
+
         guard httpResponse.statusCode == 200 else {
+            AppLog.api.error("Gemini: API error with status \(httpResponse.statusCode)")
             throw GeminiError.apiError(statusCode: httpResponse.statusCode)
         }
 
         let geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: responseData)
         guard let text = geminiResponse.candidates?.first?.content?.parts?.first?.text else {
+            AppLog.api.error("Gemini: No text in response candidates")
             throw GeminiError.noResponse
         }
+        AppLog.api.debug("Gemini: Got response text (\(text.count) chars)")
 
         let cleaned = text
             .replacingOccurrences(of: "```json", with: "")

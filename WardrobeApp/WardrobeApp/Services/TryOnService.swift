@@ -25,12 +25,18 @@ actor TryOnService {
     }
 
     func renderTryOn(personImage: UIImage, garmentImage: UIImage) async throws -> UIImage {
-        guard !apiKey.isEmpty else { throw TryOnError.missingAPIKey }
+        AppLog.api.info("TryOn: Starting render")
+        guard !apiKey.isEmpty else {
+            AppLog.api.error("TryOn: API key missing")
+            throw TryOnError.missingAPIKey
+        }
 
         guard let personData = personImage.jpegData(compressionQuality: 0.9),
               let garmentData = garmentImage.jpegData(compressionQuality: 0.9) else {
+            AppLog.api.error("TryOn: Failed to compress images")
             throw TryOnError.invalidImage
         }
+        AppLog.api.debug("TryOn: Person image \(personData.count) bytes, garment \(garmentData.count) bytes")
 
         let boundary = UUID().uuidString
         var body = Data()
@@ -67,20 +73,28 @@ actor TryOnService {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            AppLog.api.error("TryOn: Invalid HTTP response")
             throw TryOnError.apiError(statusCode: 0)
         }
+
+        AppLog.api.info("TryOn: Response status \(httpResponse.statusCode), \(data.count) bytes")
+
         guard httpResponse.statusCode == 200 else {
+            AppLog.api.error("TryOn: API error \(httpResponse.statusCode)")
             throw TryOnError.apiError(statusCode: httpResponse.statusCode)
         }
 
         guard let renderedImage = UIImage(data: data) else {
+            AppLog.api.error("TryOn: Could not decode response as image")
             throw TryOnError.invalidResponse
         }
 
+        AppLog.api.info("TryOn: Render completed successfully")
         return renderedImage
     }
 
     func renderOutfit(personImage: UIImage, garmentImages: [UIImage]) async throws -> UIImage {
+        AppLog.api.info("TryOn: Rendering outfit with \(garmentImages.count) garments")
         var currentImage = personImage
         for garment in garmentImages {
             currentImage = try await renderTryOn(personImage: currentImage, garmentImage: garment)

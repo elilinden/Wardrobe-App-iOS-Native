@@ -9,8 +9,11 @@ struct WardrobeApp: App {
     let modelContainer: ModelContainer
 
     init() {
+        AppLog.data.info("WardrobeApp initializing...")
+
         // Initialize Keychain API key manager on launch
         _ = APIKeyManager.shared
+        AppLog.data.info("API key manager initialized")
 
         do {
             let schema = Schema([
@@ -26,7 +29,9 @@ struct WardrobeApp: App {
                 cloudKitDatabase: .automatic
             )
             modelContainer = try ModelContainer(for: schema, configurations: [config])
+            AppLog.data.info("ModelContainer initialized successfully")
         } catch {
+            AppLog.data.fault("Failed to initialize ModelContainer: \(error.localizedDescription)")
             fatalError("Failed to initialize ModelContainer: \(error)")
         }
     }

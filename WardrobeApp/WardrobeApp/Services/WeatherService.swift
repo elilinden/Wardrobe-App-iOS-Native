@@ -26,22 +26,26 @@ class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func requestLocation() {
         let status = locationManager.authorizationStatus
+        AppLog.weather.info("Location auth status: \(String(describing: status))")
         switch status {
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
             locationManager.requestLocation()
         default:
+            AppLog.weather.warning("Location access denied")
             locationError = true
         }
     }
 
     func fetchWeather() async {
         guard let location = currentLocation else {
+            AppLog.weather.info("No location yet, requesting...")
             requestLocation()
             return
         }
 
+        AppLog.weather.info("Fetching weather for \(location.coordinate.latitude), \(location.coordinate.longitude)")
         do {
             let weatherService = WeatherKit.WeatherService.shared
             let weather = try await weatherService.weather(for: location)

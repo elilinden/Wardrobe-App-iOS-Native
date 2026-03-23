@@ -4,6 +4,7 @@ struct EmptyStateView: View {
     let icon: String
     let title: String
     let subtitle: String
+    var illustration: IllustrationView.Illustration? = nil
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
 
@@ -11,15 +12,19 @@ struct EmptyStateView: View {
         VStack(spacing: DS.spacingLG) {
             Spacer()
 
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 120, height: 120)
+            if let illustration {
+                IllustrationView(type: illustration, size: 140)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 120, height: 120)
 
-                Image(systemName: icon)
-                    .font(.system(size: 44))
-                    .foregroundStyle(.secondary)
-                    .symbolRenderingMode(.hierarchical)
+                    Image(systemName: icon)
+                        .font(.system(size: 44))
+                        .foregroundStyle(.secondary)
+                        .symbolRenderingMode(.hierarchical)
+                }
             }
 
             VStack(spacing: DS.spacingSM) {

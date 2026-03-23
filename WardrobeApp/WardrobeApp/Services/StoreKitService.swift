@@ -27,14 +27,17 @@ class StoreKitService: ObservableObject {
     }
 
     func purchaseUnlimitedRenders() async throws {
+        AppLog.store.info("Starting unlimited renders purchase")
         await MainActor.run { isLoading = true }
         defer { Task { @MainActor in isLoading = false } }
 
         let products = try await Product.products(for: [Self.unlimitedRendersProductID])
         guard let product = products.first else {
+            AppLog.store.error("Product not found: \(Self.unlimitedRendersProductID)")
             throw StoreError.productNotFound
         }
 
+        AppLog.store.info("Product found: \(product.displayName) - \(product.displayPrice)")
         let result = try await product.purchase()
 
         switch result {
@@ -44,8 +47,10 @@ class StoreKitService: ObservableObject {
                 await MainActor.run {
                     self.hasUnlimitedRenders = true
                 }
+                AppLog.store.info("Purchase successful, unlimited renders unlocked")
             }
         case .userCancelled:
+            AppLog.store.info("Purchase cancelled by user")
             break
         case .pending:
             break

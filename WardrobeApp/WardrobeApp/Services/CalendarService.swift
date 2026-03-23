@@ -29,6 +29,7 @@ class CalendarService: ObservableObject {
     ]
 
     func requestAccess() async {
+        AppLog.calendar.info("Requesting calendar access")
         do {
             let granted: Bool
             if #available(iOS 17.0, *) {
@@ -46,6 +47,7 @@ class CalendarService: ObservableObject {
     }
 
     func fetchTodayEvents() {
+        AppLog.calendar.info("Fetching today's events")
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
         guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }

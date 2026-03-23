@@ -8,7 +8,9 @@ actor ImageService {
     // MARK: - Background Removal
 
     func removeBackground(from image: UIImage) async -> UIImage {
+        AppLog.image.info("Starting background removal")
         guard #available(iOS 17.0, *), let cgImage = image.cgImage else {
+            AppLog.image.info("Background removal unavailable (iOS < 17 or no CGImage)")
             return image
         }
 
@@ -47,6 +49,7 @@ actor ImageService {
     // MARK: - Save (nonisolated — no mutable actor state needed)
 
     nonisolated func saveItemPhoto(_ image: UIImage, fileName: String) throws {
+        AppLog.image.debug("Saving item photo: \(fileName)")
         try FileStorage.ensureDirectoryExists(FileStorage.itemPhotosDirectory)
         let url = FileStorage.itemPhotoURL(fileName: fileName)
         guard let data = image.jpegData(compressionQuality: 0.85) else {
@@ -56,6 +59,7 @@ actor ImageService {
     }
 
     nonisolated func saveAvatarPhoto(_ image: UIImage, fileName: String) throws {
+        AppLog.image.debug("Saving avatar photo: \(fileName)")
         try FileStorage.ensureDirectoryExists(FileStorage.avatarPhotosDirectory)
         let url = FileStorage.avatarPhotoURL(fileName: fileName)
         guard let data = image.jpegData(compressionQuality: 0.9) else {
@@ -65,6 +69,7 @@ actor ImageService {
     }
 
     nonisolated func saveTryOnRender(_ image: UIImage) throws -> String {
+        AppLog.image.debug("Saving try-on render")
         try FileStorage.ensureDirectoryExists(FileStorage.tryOnRendersDirectory)
         let fileName = "\(UUID().uuidString).jpg"
         let url = FileStorage.tryOnRenderURL(fileName: fileName)
