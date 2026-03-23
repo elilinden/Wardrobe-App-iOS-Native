@@ -10,7 +10,7 @@ struct TryOnView: View {
     @State private var isRendering = false
     @State private var renderedImage: UIImage?
     @State private var errorMessage: String?
-    @State private var showUpgradeSheet = false
+    @State private var showUpgrade = false
 
     private var profile: UserProfile? { profiles.first }
 
@@ -18,87 +18,19 @@ struct TryOnView: View {
         NavigationStack {
             VStack {
                 if isRendering {
-                    VStack(spacing: 20) {
-                        Spacer()
-                        ProgressView()
-                            .scaleEffect(2)
-                        Text("Rendering your outfit...")
-                            .font(.headline)
-                        Text("This may take 10-20 seconds")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
+                    GlassProgressView(
+                        title: "Rendering your outfit...",
+                        subtitle: "This may take 10-20 seconds"
+                    )
                 } else if let rendered = renderedImage {
-                    renderedResult(rendered)
+                    renderedView(rendered)
                 } else if let error = errorMessage {
-                    VStack(spacing: 16) {
-                        Spacer()
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.orange)
-                        Text(error)
-                            .multilineTextAlignment(.center)
-                        Button("Try Again") { startRender() }
-                            .buttonStyle(.borderedProminent)
-                        Spacer()
-                    }
-                    .padding()
+                    errorView(error)
                 } else {
-                    // Preview before rendering
-                    VStack(spacing: 16) {
-                        Text("Preview")
-                            .font(.headline)
-
-                        HStack(spacing: 8) {
-                            ForEach(items, id: \.id) { item in
-                                ItemThumbnail(item: item, size: nil)
-                                    .frame(maxWidth: .infinity)
-                                    .aspectRatio(0.75, contentMode: .fit)
-                            }
-                        }
-                        .padding(.horizontal)
-
-                        if let profile = profile {
-                            if profile.canRender {
-                                Text("\(profile.rendersRemaining) renders remaining this month")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                Button(action: startRender) {
-                                    Label("Render Try-On", systemImage: "wand.and.stars")
-                                        .font(.headline)
-                                        .frame(maxWidth: .infinity)
-                                        .padding()
-                                        .background(Color.accentColor)
-                                        .foregroundStyle(.white)
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                }
-                                .padding(.horizontal)
-                            } else {
-                                Text("You've used all 30 renders this month")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                Button {
-                                    showUpgradeSheet = true
-                                } label: {
-                                    Text("Unlock Unlimited Renders — $2.99")
-                                        .font(.headline)
-                                        .frame(maxWidth: .infinity)
-                                        .padding()
-                                        .background(Color.accentColor)
-                                        .foregroundStyle(.white)
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                }
-                                .padding(.horizontal)
-                            }
-                        }
-
-                        Spacer()
-                    }
+                    preRenderView
                 }
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Try On")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -106,54 +38,128 @@ struct TryOnView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showUpgradeSheet) {
+            .sheet(isPresented: $showUpgrade) {
                 UnlimitedRendersUpgradeView()
             }
         }
     }
 
-    private func renderedResult(_ image: UIImage) -> some View {
-        VStack(spacing: 16) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding()
+    // MARK: - Pre-render
 
-            HStack(spacing: 12) {
-                Button {
-                    UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                } label: {
-                    Label("Save", systemImage: "square.and.arrow.down")
+    private var preRenderView: some View {
+        VStack(spacing: DS.spacingXL) {
+            Spacer()
+
+            Text("Preview")
+                .font(.headline)
+
+            HStack(spacing: DS.spacingSM) {
+                ForEach(items, id: \.id) { item in
+                    ItemThumbnail(item: item, showConditionBadge: false)
+                        .aspectRatio(0.7, contentMode: .fit)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, DS.spacingXL)
 
-                ShareLink(item: Image(uiImage: image), preview: SharePreview("Outfit", image: Image(uiImage: image))) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
+            if let profile {
+                if profile.canRender {
+                    Text("\(profile.rendersRemaining) renders remaining this month")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button(action: startRender) {
+                        Label("Render Try-On", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(GlassButtonStyle())
+                    .padding(.horizontal, DS.spacingXL)
+                } else {
+                    Text("You've used all \(DS.monthlyRenderLimit) renders this month")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Button { showUpgrade = true } label: {
+                        Text("Unlock Unlimited — $2.99")
+                    }
+                    .buttonStyle(GlassButtonStyle())
+                    .padding(.horizontal, DS.spacingXL)
                 }
-                .buttonStyle(.bordered)
             }
-            .padding(.horizontal)
 
-            Button {
-                saveToLookbook(image)
-            } label: {
-                Label("Add to Lookbook", systemImage: "bookmark")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(.horizontal)
+            Spacer()
         }
     }
 
-    private func startRender() {
-        guard let profile = profile else { return }
+    // MARK: - Rendered
 
-        if !profile.canRender {
-            showUpgradeSheet = true
+    private func renderedView(_ image: UIImage) -> some View {
+        ScrollView {
+            VStack(spacing: DS.spacingLG) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: DS.radiusXL))
+                    .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+                    .padding(.horizontal, DS.spacingLG)
+
+                HStack(spacing: DS.spacingMD) {
+                    Button {
+                        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                        Haptic.success()
+                    } label: {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+
+                    ShareLink(
+                        item: Image(uiImage: image),
+                        preview: SharePreview("Outfit", image: Image(uiImage: image))
+                    ) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                            .font(.subheadline.weight(.medium))
+                            .padding(.vertical, 12)
+                            .background {
+                                RoundedRectangle(cornerRadius: DS.radiusMD)
+                                    .fill(.ultraThinMaterial)
+                            }
+                    }
+                }
+                .padding(.horizontal, DS.spacingLG)
+
+                Button { saveToLookbook(image) } label: {
+                    Label("Add to Lookbook", systemImage: "bookmark")
+                }
+                .buttonStyle(GlassButtonStyle())
+                .padding(.horizontal, DS.spacingLG)
+            }
+        }
+    }
+
+    // MARK: - Error
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: DS.spacingLG) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundStyle(.orange)
+            Text(message)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            Button("Try Again") { startRender() }
+                .buttonStyle(GlassButtonStyle())
+                .padding(.horizontal, DS.spacingXL)
+            Spacer()
+        }
+    }
+
+    // MARK: - Actions
+
+    private func startRender() {
+        guard let profile else { return }
+        guard profile.canRender else {
+            showUpgrade = true
             return
         }
 
@@ -162,16 +168,16 @@ struct TryOnView: View {
 
         Task {
             guard let avatarURL = profile.avatarPhotoURLs.first,
-                  let avatarImage = ImageService.shared.loadImage(from: avatarURL) else {
+                  let avatar = ImageCache.shared.load(from: avatarURL) else {
                 await MainActor.run {
-                    errorMessage = "Avatar photos not found. Please retake them in Settings."
+                    errorMessage = "Avatar photos not found. Please retake in Settings."
                     isRendering = false
                 }
                 return
             }
 
-            let garmentImages = items.compactMap { ImageService.shared.loadImage(from: $0.photoURL) }
-            guard !garmentImages.isEmpty else {
+            let garments = items.compactMap { ImageCache.shared.load(from: $0.photoURL) }
+            guard !garments.isEmpty else {
                 await MainActor.run {
                     errorMessage = "Could not load garment images."
                     isRendering = false
@@ -181,17 +187,15 @@ struct TryOnView: View {
 
             do {
                 let result = try await TryOnService().renderOutfit(
-                    personImage: avatarImage,
-                    garmentImages: garmentImages
+                    personImage: avatar, garmentImages: garments
                 )
-
                 profile.incrementRenderCount()
                 try? modelContext.save()
 
                 await MainActor.run {
                     renderedImage = result
                     isRendering = false
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    Haptic.medium()
                 }
             } catch {
                 await MainActor.run {
@@ -203,43 +207,47 @@ struct TryOnView: View {
     }
 
     private func saveToLookbook(_ image: UIImage) {
-        let fileName = "\(UUID().uuidString).jpg"
-        try? ImageService.shared.saveTryOnRender(image, fileName: fileName)
-
+        let fileName = try? ImageService.shared.saveTryOnRender(image)
         let outfit = Outfit(itemIDs: items.map(\.id))
         outfit.tryOnRenderFileName = fileName
         modelContext.insert(outfit)
         try? modelContext.save()
-
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptic.success()
     }
 }
 
+// MARK: - Upgrade Sheet
+
 struct UnlimitedRendersUpgradeView: View {
-    @StateObject private var storeService = StoreKitService()
+    @StateObject private var store = StoreKitService()
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: DS.spacingXL) {
             Spacer()
 
-            Image(systemName: "wand.and.stars")
-                .font(.system(size: 60))
-                .foregroundStyle(.accent)
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 120, height: 120)
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.accent)
+                    .symbolEffect(.pulse)
+            }
 
-            Text("Unlimited Try-On Renders")
-                .font(.title2)
-                .fontWeight(.bold)
+            VStack(spacing: DS.spacingMD) {
+                Text("Unlimited Try-On Renders")
+                    .font(.title2.weight(.bold))
 
-            Text("See how any outfit looks on you — unlimited times, forever.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+                Text("See how any outfit looks on you.\nUnlimited times, forever.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
 
             Text("$2.99")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+                .font(.system(size: 44, weight: .bold, design: .rounded))
 
             Text("One-time purchase. No subscription.")
                 .font(.caption)
@@ -247,32 +255,26 @@ struct UnlimitedRendersUpgradeView: View {
 
             Spacer()
 
-            if storeService.isLoading {
+            if store.isLoading {
                 ProgressView()
             } else {
                 Button {
                     Task {
-                        try? await storeService.purchaseUnlimitedRenders()
-                        if storeService.hasUnlimitedRenders {
-                            dismiss()
-                        }
+                        try? await store.purchaseUnlimitedRenders()
+                        if store.hasUnlimitedRenders { dismiss() }
                     }
                 } label: {
                     Text("Unlock Unlimited Renders")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .padding(.horizontal)
+                .buttonStyle(GlassButtonStyle())
+                .padding(.horizontal, DS.spacingXL)
             }
 
             Button("Not now") { dismiss() }
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 40)
         }
-        .padding()
+        .padding(DS.spacingLG)
+        .background { MeshGradientBackground() }
     }
 }

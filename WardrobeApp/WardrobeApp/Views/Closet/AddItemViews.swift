@@ -9,31 +9,29 @@ struct AddItemMenuView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                ImportOptionCard(
+            VStack(spacing: DS.spacingMD) {
+                ImportCard(
                     icon: "camera.viewfinder",
                     title: "Batch Photo",
-                    description: "Photograph a pile of clothes, we'll separate them",
-                    action: { showBatch = true }
-                )
+                    description: "Photograph a pile of clothes, we'll separate them"
+                ) { showBatch = true }
 
-                ImportOptionCard(
+                ImportCard(
                     icon: "camera",
                     title: "Single Item",
-                    description: "Add one piece at a time",
-                    action: { showSingle = true }
-                )
+                    description: "Add one piece at a time"
+                ) { showSingle = true }
 
-                ImportOptionCard(
+                ImportCard(
                     icon: "magnifyingglass",
                     title: "Search Online",
-                    description: "Find an item by brand/name and import the product image",
-                    action: { showOnline = true }
-                )
+                    description: "Find an item by brand/name and import the product image"
+                ) { showOnline = true }
 
                 Spacer()
             }
-            .padding()
+            .padding(DS.spacingLG)
+            .background { MeshGradientBackground() }
             .navigationTitle("Add Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -48,16 +46,17 @@ struct AddItemMenuView: View {
     }
 }
 
+// MARK: - Single Item
+
 struct AddItemSingleView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+
     @State private var capturedImage: UIImage?
     @State private var showCamera = true
     @State private var isProcessing = false
-    @State private var tagResult: GeminiTagResult?
     @State private var errorMessage: String?
 
-    // Editable fields
     @State private var category: Category = .top
     @State private var subcategory = ""
     @State private var primaryColor = ""
@@ -72,28 +71,24 @@ struct AddItemSingleView: View {
             Group {
                 if showCamera {
                     VStack {
-                        Text("Take a photo of the item")
+                        Text("Fill the frame with the item")
                             .font(.headline)
                             .padding()
                         ImagePicker(image: $capturedImage, sourceType: .camera)
                     }
-                    .onChange(of: capturedImage) { _, newValue in
-                        if newValue != nil {
+                    .onChange(of: capturedImage) { _, newVal in
+                        if newVal != nil {
                             showCamera = false
                             processImage()
                         }
                     }
                 } else if isProcessing {
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                        Text("Analyzing your item...")
-                            .font(.headline)
-                    }
+                    GlassProgressView(title: "Analyzing your item...", subtitle: "Removing background & auto-tagging")
                 } else {
                     reviewForm
                 }
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Add Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -106,27 +101,26 @@ struct AddItemSingleView: View {
 
     private var reviewForm: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: DS.spacingLG) {
                 if let image = capturedImage {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxHeight: 250)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .frame(maxHeight: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.radiusLG))
+                        .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
                 }
 
                 if let error = errorMessage {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.orange)
-                        .padding(.horizontal)
+                        .glassCard(cornerRadius: DS.radiusMD)
                 }
 
-                VStack(spacing: 12) {
+                VStack(spacing: DS.spacingMD) {
                     Picker("Category", selection: $category) {
-                        ForEach(Category.allCases) { cat in
-                            Text(cat.displayName).tag(cat)
-                        }
+                        ForEach(Category.allCases) { c in Text(c.displayName).tag(c) }
                     }
 
                     HStack {
@@ -151,37 +145,25 @@ struct AddItemSingleView: View {
                     }
 
                     Picker("Pattern", selection: $pattern) {
-                        ForEach(Pattern.allCases, id: \.self) { p in
-                            Text(p.rawValue.capitalized).tag(p)
-                        }
+                        ForEach(Pattern.allCases, id: \.self) { p in Text(p.displayName).tag(p) }
                     }
 
                     Picker("Material", selection: $material) {
-                        ForEach(Material.allCases, id: \.self) { m in
-                            Text(m.rawValue.capitalized).tag(m)
-                        }
+                        ForEach(Material.allCases, id: \.self) { m in Text(m.displayName).tag(m) }
                     }
 
                     Picker("Formality", selection: $formality) {
-                        ForEach(Formality.allCases, id: \.self) { f in
-                            Text(f.displayName).tag(f)
-                        }
+                        ForEach(Formality.allCases, id: \.self) { f in Text(f.displayName).tag(f) }
                     }
                 }
-                .padding(.horizontal)
+                .glassCard()
 
                 Button(action: saveItem) {
                     Text("Add to Closet")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+                .buttonStyle(GlassButtonStyle())
             }
+            .padding(DS.spacingLG)
         }
     }
 
@@ -190,15 +172,12 @@ struct AddItemSingleView: View {
         isProcessing = true
 
         Task {
-            // Remove background
             let cleanImage = await ImageService.shared.removeBackground(from: image)
             await MainActor.run { capturedImage = cleanImage }
 
-            // Auto-tag with Gemini
             do {
                 let result = try await GeminiVisionService().tagSingleItem(image: cleanImage)
                 await MainActor.run {
-                    tagResult = result
                     category = Category(rawValue: result.category) ?? .top
                     subcategory = result.subcategory
                     primaryColor = result.primaryColor
@@ -211,7 +190,7 @@ struct AddItemSingleView: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = "Auto-tagging unavailable, please tag manually."
+                    errorMessage = error.localizedDescription
                     isProcessing = false
                 }
             }
@@ -236,21 +215,24 @@ struct AddItemSingleView: View {
 
         modelContext.insert(item)
         try? modelContext.save()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptic.success()
         dismiss()
     }
 }
 
+// MARK: - Batch
+
 struct AddItemBatchView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+
     @State private var capturedImage: UIImage?
     @State private var showCamera = true
     @State private var isProcessing = false
-    @State private var detectedItems: [DetectedBatchItem] = []
+    @State private var detectedItems: [DetectedItem] = []
     @State private var errorMessage: String?
 
-    struct DetectedBatchItem: Identifiable {
+    struct DetectedItem: Identifiable {
         let id = UUID()
         var image: UIImage
         var category: Category
@@ -258,7 +240,7 @@ struct AddItemBatchView: View {
         var pattern: Pattern
         var material: Material
         var formality: Formality
-        var isSelected: Bool = true
+        var isSelected = true
     }
 
     var body: some View {
@@ -266,29 +248,25 @@ struct AddItemBatchView: View {
             Group {
                 if showCamera {
                     VStack {
-                        Text("Lay your clothes flat and photograph the whole pile")
+                        Text("Lay clothes flat and photograph the pile")
                             .font(.headline)
                             .multilineTextAlignment(.center)
                             .padding()
                         ImagePicker(image: $capturedImage, sourceType: .camera)
                     }
-                    .onChange(of: capturedImage) { _, newValue in
-                        if newValue != nil {
+                    .onChange(of: capturedImage) { _, newVal in
+                        if newVal != nil {
                             showCamera = false
                             processBatch()
                         }
                     }
                 } else if isProcessing {
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                        Text("Finding your clothes...")
-                            .font(.headline)
-                    }
+                    GlassProgressView(title: "Finding your clothes...", subtitle: "Detecting and separating items")
                 } else {
-                    reviewList
+                    reviewGrid
                 }
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Batch Import")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -299,57 +277,50 @@ struct AddItemBatchView: View {
         }
     }
 
-    private var reviewList: some View {
+    private var reviewGrid: some View {
         VStack {
             if let error = errorMessage {
-                Text(error)
-                    .foregroundStyle(.orange)
-                    .padding()
+                Text(error).foregroundStyle(.orange).font(.caption).padding()
             }
 
             ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                LazyVGrid(columns: DS.gridColumns2, spacing: DS.spacingMD) {
                     ForEach($detectedItems) { $item in
-                        VStack(spacing: 4) {
+                        VStack(spacing: DS.spacingSM) {
                             Image(uiImage: item.image)
                                 .resizable()
                                 .scaledToFit()
                                 .frame(height: 120)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .clipShape(RoundedRectangle(cornerRadius: DS.radiusSM))
                                 .overlay(alignment: .topTrailing) {
                                     Button {
                                         item.isSelected.toggle()
+                                        Haptic.selection()
                                     } label: {
                                         Image(systemName: item.isSelected ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(item.isSelected ? .green : .gray)
+                                            .foregroundStyle(item.isSelected ? .green : .secondary)
                                             .font(.title3)
+                                            .padding(DS.spacingXS)
                                     }
-                                    .padding(4)
                                 }
 
-                            Text(item.category.displayName)
-                                .font(.caption)
-                            Text(item.primaryColor)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            Text(item.category.displayName).font(.caption)
+                            Text(item.primaryColor).font(.caption2).foregroundStyle(.secondary)
                         }
+                        .glassCard(cornerRadius: DS.radiusMD)
                     }
                 }
-                .padding()
+                .padding(DS.spacingLG)
             }
 
-            let selectedCount = detectedItems.filter(\.isSelected).count
-            Button(action: saveItems) {
-                Text("Add \(selectedCount) items to Closet")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(selectedCount > 0 ? Color.accentColor : Color.gray)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            let count = detectedItems.filter(\.isSelected).count
+            Button { saveItems() } label: {
+                Text("Add \(count) items to Closet")
             }
-            .disabled(selectedCount == 0)
-            .padding()
+            .buttonStyle(GlassButtonStyle())
+            .disabled(count == 0)
+            .opacity(count > 0 ? 1 : 0.5)
+            .padding(DS.spacingLG)
         }
     }
 
@@ -359,29 +330,26 @@ struct AddItemBatchView: View {
 
         Task {
             do {
-                let items = try await GeminiVisionService().detectBatchItems(image: image)
+                let results = try await GeminiVisionService().detectBatchItems(image: image)
+                var detected: [DetectedItem] = []
 
-                var detected: [DetectedBatchItem] = []
-                for batchItem in items {
-                    // Crop the image using bounding box
+                for bi in results {
                     let cropRect = CGRect(
-                        x: batchItem.boundingBox.x * Double(image.size.width),
-                        y: batchItem.boundingBox.y * Double(image.size.height),
-                        width: batchItem.boundingBox.width * Double(image.size.width),
-                        height: batchItem.boundingBox.height * Double(image.size.height)
+                        x: bi.boundingBox.x * Double(image.size.width),
+                        y: bi.boundingBox.y * Double(image.size.height),
+                        width: bi.boundingBox.width * Double(image.size.width),
+                        height: bi.boundingBox.height * Double(image.size.height)
                     )
-
-                    if let cgImage = image.cgImage?.cropping(to: cropRect) {
-                        var croppedImage = UIImage(cgImage: cgImage)
-                        croppedImage = await ImageService.shared.removeBackground(from: croppedImage)
-
-                        detected.append(DetectedBatchItem(
-                            image: croppedImage,
-                            category: Category(rawValue: batchItem.category) ?? .top,
-                            primaryColor: batchItem.primaryColor,
-                            pattern: Pattern(rawValue: batchItem.pattern) ?? .solid,
-                            material: Material(rawValue: batchItem.materialEstimate) ?? .unknown,
-                            formality: Formality(rawValue: batchItem.formality) ?? .casual
+                    if let cg = image.cgImage?.cropping(to: cropRect) {
+                        var cropped = UIImage(cgImage: cg)
+                        cropped = await ImageService.shared.removeBackground(from: cropped)
+                        detected.append(DetectedItem(
+                            image: cropped,
+                            category: Category(rawValue: bi.category) ?? .top,
+                            primaryColor: bi.primaryColor,
+                            pattern: Pattern(rawValue: bi.pattern) ?? .solid,
+                            material: Material(rawValue: bi.materialEstimate) ?? .unknown,
+                            formality: Formality(rawValue: bi.formality) ?? .casual
                         ))
                     }
                 }
@@ -392,7 +360,7 @@ struct AddItemBatchView: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = "Could not detect items. Please try again or add items individually."
+                    errorMessage = "Could not detect items. Try adding individually."
                     isProcessing = false
                 }
             }
@@ -400,25 +368,25 @@ struct AddItemBatchView: View {
     }
 
     private func saveItems() {
-        for detected in detectedItems where detected.isSelected {
+        for d in detectedItems where d.isSelected {
             let item = WardrobeItem(
-                category: detected.category,
-                subcategory: detected.category.rawValue,
-                primaryColor: detected.primaryColor,
-                pattern: detected.pattern,
-                materialEstimate: detected.material,
-                formality: detected.formality
+                category: d.category,
+                subcategory: d.category.rawValue,
+                primaryColor: d.primaryColor,
+                pattern: d.pattern,
+                materialEstimate: d.material,
+                formality: d.formality
             )
-
-            try? ImageService.shared.saveItemPhoto(detected.image, fileName: item.photoFileName)
+            try? ImageService.shared.saveItemPhoto(d.image, fileName: item.photoFileName)
             modelContext.insert(item)
         }
-
         try? modelContext.save()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptic.success()
         dismiss()
     }
 }
+
+// MARK: - Online Search
 
 struct OnlineSearchView: View {
     @Environment(\.dismiss) private var dismiss
@@ -426,20 +394,16 @@ struct OnlineSearchView: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
-                Text("Search for clothing items by brand and name")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding()
-
-                Text("Coming soon — this feature requires a product image search API integration.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-
+            VStack(spacing: DS.spacingXL) {
+                Spacer()
+                EmptyStateView(
+                    icon: "magnifyingglass",
+                    title: "Search Online",
+                    subtitle: "Search for clothing items by brand and name. This feature requires a product image search API integration."
+                )
                 Spacer()
             }
+            .background { MeshGradientBackground() }
             .searchable(text: $searchQuery, prompt: "e.g. Zara linen blazer cream")
             .navigationTitle("Search Online")
             .navigationBarTitleDisplayMode(.inline)

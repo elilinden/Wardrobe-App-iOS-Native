@@ -3,11 +3,11 @@ import SwiftData
 
 @Model
 final class StylePreferences {
-    var dressesFor: String // work, casual, going_out, mix
+    var dressesFor: String
     var excludedColors: [String]
-    var styleDescription: String // minimal, classic, streetwear, etc.
-    var decisionTime: String // under_1_min, few_minutes, like_exploring
-    var morningNotificationPref: String // notify, check_manually, no
+    var styleDescription: String
+    var decisionTime: String
+    var morningNotificationPref: String
 
     init(
         dressesFor: String = "mix",
@@ -42,38 +42,42 @@ final class UserProfile {
     var eveningReminderMinute: Int
     var iCloudSyncEnabled: Bool
     var hasCompletedOnboarding: Bool
+    var thumbsDownOutfitSets: [[String]] // stored as arrays of UUID strings
+
+    // MARK: Computed Properties
 
     var avatarPhotoURLs: [URL] {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let avatarDir = documentsPath.appendingPathComponent("AvatarPhotos")
-        return avatarPhotoFileNames.map { avatarDir.appendingPathComponent($0) }
+        avatarPhotoFileNames.map { FileStorage.avatarPhotoURL(fileName: $0) }
+    }
+
+    var hasAvatarPhotos: Bool {
+        !avatarPhotoFileNames.isEmpty
     }
 
     var canRender: Bool {
         if hasUnlimitedRenders { return true }
-        checkAndResetMonthlyCount()
-        return monthlyRenderCount < 30
+        refreshMonthlyCountIfNeeded()
+        return monthlyRenderCount < DS.monthlyRenderLimit
     }
 
     var rendersRemaining: Int {
         if hasUnlimitedRenders { return Int.max }
-        checkAndResetMonthlyCount()
-        return max(0, 30 - monthlyRenderCount)
+        refreshMonthlyCountIfNeeded()
+        return max(0, DS.monthlyRenderLimit - monthlyRenderCount)
     }
 
-    func incrementRenderCount() {
-        checkAndResetMonthlyCount()
-        monthlyRenderCount += 1
+    var rendersUsedText: String {
+        if hasUnlimitedRenders { return "Unlimited" }
+        return "\(monthlyRenderCount) of \(DS.monthlyRenderLimit)"
     }
 
-    private func checkAndResetMonthlyCount() {
-        let calendar = Calendar.current
-        let now = Date()
-        if !calendar.isDate(monthlyRenderResetDate, equalTo: now, toGranularity: .month) {
-            monthlyRenderCount = 0
-            monthlyRenderResetDate = now
-        }
+    var thumbsDownHistory: Set<Set<UUID>> {
+        Set(thumbsDownOutfitSets.map { set in
+            Set(set.compactMap { UUID(uuidString: $0) })
+        })
     }
+
+    // MARK: Init
 
     init() {
         self.id = UUID()
@@ -83,7 +87,7 @@ final class UserProfile {
         self.monthlyRenderResetDate = Date()
         self.hasUnlimitedRenders = false
         self.weatherSensitivity = 0.5
-        self.reWearGapDays = 14
+        self.reWearGapDays = DS.defaultReWearGapDays
         self.notificationsEnabled = false
         self.notificationHour = 7
         self.notificationMinute = 0
@@ -92,5 +96,35 @@ final class UserProfile {
         self.eveningReminderMinute = 0
         self.iCloudSyncEnabled = true
         self.hasCompletedOnboarding = false
+        self.thumbsDownOutfitSets = []
+    }
+
+    // MARK: Actions
+
+    func incrementRenderCount() {
+        refreshMonthlyCountIfNeeded()
+        monthlyRenderCount += 1
+    }
+
+    func addThumbsDown(itemIDs: Set<UUID>) {
+        let strings = itemIDs.map(\.uuidString)
+        thumbsDownOutfitSets.append(strings)
+    }
+
+    private func refreshMonthlyCountIfNeeded() {
+        let calendar = Calendar.current
+        if !calendar.isDate(monthlyRenderResetDate, equalTo: Date(), toGranularity: .month) {
+            monthlyRenderCount = 0
+            monthlyRenderResetDate = Date()
+        }
+    }
+
+    func cleanupAllPhotos() {
+        for url in avatarPhotoURLs {
+            ImageCache.shared.invalidate(for: url)
+        }
+        FileStorage.deleteDirectory(FileStorage.itemPhotosDirectory)
+        FileStorage.deleteDirectory(FileStorage.avatarPhotosDirectory)
+        FileStorage.deleteDirectory(FileStorage.tryOnRendersDirectory)
     }
 }

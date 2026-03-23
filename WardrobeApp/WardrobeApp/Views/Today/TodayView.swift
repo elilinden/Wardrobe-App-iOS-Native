@@ -3,7 +3,7 @@ import SwiftData
 
 struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [WardrobeItem]
+    @Query(filter: #Predicate<WardrobeItem> { !$0.isWishlist }) private var items: [WardrobeItem]
     @Query private var outfits: [Outfit]
     @Query private var profiles: [UserProfile]
 
@@ -14,55 +14,23 @@ struct TodayView: View {
     @State private var selectedMood: Mood?
     @State private var suggestions: [OutfitSuggestion] = []
     @State private var showSettings = false
-    @State private var thumbsDownHistory: Set<Set<UUID>> = []
 
-    private let suggestionEngine = SuggestionEngine()
-
+    private let engine = SuggestionEngine()
     private var profile: UserProfile? { profiles.first }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Date
+                VStack(spacing: DS.spacingLG) {
                     dateHeader
-
-                    // Weather
-                    if let weather = weatherService.currentWeather {
-                        weatherStrip(weather)
-                    }
-
-                    // Calendar events
-                    if !calendarService.todayEvents.isEmpty {
-                        calendarStrip
-                    }
-
-                    // Occasion filters
-                    filterChips
-
-                    // Suggestions
-                    if items.filter({ !$0.isWishlist }).count < 3 {
-                        emptyState
-                    } else if suggestions.isEmpty {
-                        VStack(spacing: 12) {
-                            ProgressView()
-                            Text("Generating suggestions...")
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 40)
-                    } else {
-                        ForEach(suggestions) { suggestion in
-                            SuggestionCard(
-                                suggestion: suggestion,
-                                onThumbsUp: { thumbsUp(suggestion) },
-                                onThumbsDown: { thumbsDown(suggestion) },
-                                onSaveToLookbook: { saveToLookbook(suggestion) }
-                            )
-                        }
-                    }
+                    weatherCard
+                    calendarChips
+                    filterRow
+                    suggestionsSection
                 }
-                .padding()
+                .padding(DS.spacingLG)
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Today")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -71,9 +39,7 @@ struct TodayView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
+            .sheet(isPresented: $showSettings) { SettingsView() }
             .onAppear {
                 weatherService.requestLocation()
                 Task { await calendarService.requestAccess() }
@@ -84,228 +50,229 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Date Header
+    // MARK: - Date
 
     private var dateHeader: some View {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
-        return Text(formatter.string(from: Date()))
-            .font(.title2)
-            .fontWeight(.bold)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - Weather Strip
-
-    private func weatherStrip(_ weather: WeatherInfo) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: weather.conditionSymbol)
-                .font(.title2)
-                .symbolRenderingMode(.multicolor)
-
-            VStack(alignment: .leading) {
-                Text("\(Int(weather.currentTemp))°F")
-                    .font(.headline)
-                Text(weather.conditionDescription)
-                    .font(.caption)
+        HStack {
+            VStack(alignment: .leading, spacing: DS.spacingXS) {
+                Text(Date(), format: .dateTime.weekday(.wide))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Text(Date(), format: .dateTime.month(.wide).day())
+                    .font(.title.weight(.bold))
             }
-
             Spacer()
-
-            VStack(alignment: .trailing) {
-                Text("H: \(Int(weather.highTemp))°")
-                    .font(.caption)
-                Text("L: \(Int(weather.lowTemp))°")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: - Calendar Strip
+    // MARK: - Weather
 
-    private var calendarStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(calendarService.todayEvents) { event in
-                    Text(event.chipLabel)
+    @ViewBuilder
+    private var weatherCard: some View {
+        if let weather = weatherService.currentWeather {
+            HStack(spacing: DS.spacingMD) {
+                Image(systemName: weather.conditionSymbol)
+                    .font(.largeTitle)
+                    .symbolRenderingMode(.multicolor)
+
+                VStack(alignment: .leading, spacing: DS.spacingXS) {
+                    Text("\(Int(weather.currentTemp))°F")
+                        .font(.title2.weight(.semibold))
+                    Text(weather.conditionDescription.capitalized)
                         .font(.caption)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(event.isWorkRelated ? Color.blue.opacity(0.15) : Color(.systemGray5))
-                        .clipShape(Capsule())
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: DS.spacingXS) {
+                    Label("\(Int(weather.highTemp))°", systemImage: "arrow.up")
+                        .font(.caption.weight(.medium))
+                    Label("\(Int(weather.lowTemp))°", systemImage: "arrow.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .glassCard()
+        }
+    }
+
+    // MARK: - Calendar
+
+    @ViewBuilder
+    private var calendarChips: some View {
+        if !calendarService.todayEvents.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DS.spacingSM) {
+                    ForEach(calendarService.todayEvents) { event in
+                        HStack(spacing: DS.spacingXS) {
+                            Circle()
+                                .fill(event.isWorkRelated ? Color.blue : Color.green)
+                                .frame(width: 6, height: 6)
+                            Text(event.chipLabel)
+                                .font(.caption)
+                        }
+                        .glassPill()
+                    }
                 }
             }
         }
     }
 
-    // MARK: - Filter Chips
+    // MARK: - Filters
 
-    private var filterChips: some View {
-        VStack(spacing: 8) {
+    private var filterRow: some View {
+        VStack(spacing: DS.spacingSM) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Occasion.allCases, id: \.self) { occasion in
-                        FilterChip(
-                            title: occasion.displayName,
-                            isSelected: selectedOccasion == occasion,
-                            onTap: {
-                                selectedOccasion = selectedOccasion == occasion ? nil : occasion
-                            }
-                        )
+                HStack(spacing: DS.spacingSM) {
+                    ForEach(Occasion.allCases, id: \.self) { occ in
+                        GlassChip(
+                            title: occ.displayName,
+                            isSelected: selectedOccasion == occ
+                        ) {
+                            selectedOccasion = selectedOccasion == occ ? nil : occ
+                        }
                     }
                 }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.spacingSM) {
                     ForEach(Mood.allCases, id: \.self) { mood in
-                        FilterChip(
+                        GlassChip(
                             title: mood.displayName,
-                            isSelected: selectedMood == mood,
-                            onTap: {
-                                selectedMood = selectedMood == mood ? nil : mood
-                            }
-                        )
+                            isSelected: selectedMood == mood
+                        ) {
+                            selectedMood = selectedMood == mood ? nil : mood
+                        }
                     }
                 }
             }
         }
     }
 
-    // MARK: - Empty State
+    // MARK: - Suggestions
 
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "sun.max")
-                .font(.system(size: 60))
-                .foregroundStyle(.quaternary)
-            Text("Add some clothes first,\nthen we'll suggest outfits.")
-                .font(.title3)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            Spacer()
+    @ViewBuilder
+    private var suggestionsSection: some View {
+        if items.count < 3 {
+            EmptyStateView(
+                icon: "sun.max",
+                title: "Add some clothes first",
+                subtitle: "We need at least 3 items to suggest outfits."
+            )
+        } else if suggestions.isEmpty {
+            GlassProgressView(title: "Generating suggestions...")
+        } else {
+            ForEach(suggestions) { suggestion in
+                SuggestionCardView(
+                    suggestion: suggestion,
+                    onThumbsUp: { thumbsUp(suggestion) },
+                    onThumbsDown: { thumbsDown(suggestion) },
+                    onSave: { save(suggestion) }
+                )
+            }
         }
-        .padding(.top, 40)
     }
 
     // MARK: - Logic
 
     private func generateSuggestions() {
-        let closetItems = items.filter { !$0.isWishlist }
-        guard closetItems.count >= 3 else { return }
+        guard items.count >= 3 else { return }
 
-        suggestions = suggestionEngine.generateSuggestions(
-            allItems: closetItems,
+        suggestions = engine.generateSuggestions(
+            allItems: items,
             weather: weatherService.currentWeather,
             events: calendarService.todayEvents,
             occasion: selectedOccasion,
             mood: selectedMood,
             recentOutfits: outfits,
-            thumbsDownHistory: thumbsDownHistory,
-            reWearGapDays: profile?.reWearGapDays ?? 14,
+            thumbsDownHistory: profile?.thumbsDownHistory ?? [],
+            reWearGapDays: profile?.reWearGapDays ?? DS.defaultReWearGapDays,
             weatherSensitivity: profile?.weatherSensitivity ?? 0.5
         )
     }
 
-    private func thumbsUp(_ suggestion: OutfitSuggestion) {
-        // Positive feedback - boost these items in future
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    private func thumbsUp(_ s: OutfitSuggestion) {
+        Haptic.light()
+        // Positive signal - could be used for ML later
     }
 
-    private func thumbsDown(_ suggestion: OutfitSuggestion) {
-        let itemIDs = Set(suggestion.items.map(\.id))
-        thumbsDownHistory.insert(itemIDs)
+    private func thumbsDown(_ s: OutfitSuggestion) {
+        profile?.addThumbsDown(itemIDs: Set(s.items.map(\.id)))
+        try? modelContext.save()
         generateSuggestions()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptic.light()
     }
 
-    private func saveToLookbook(_ suggestion: OutfitSuggestion) {
-        let outfit = Outfit(
-            itemIDs: suggestion.items.map(\.id),
-            occasion: selectedOccasion
-        )
+    private func save(_ s: OutfitSuggestion) {
+        let outfit = Outfit(itemIDs: s.items.map(\.id), occasion: selectedOccasion)
         modelContext.insert(outfit)
         try? modelContext.save()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptic.success()
     }
 }
 
-struct SuggestionCard: View {
+// MARK: - Suggestion Card
+
+struct SuggestionCardView: View {
     let suggestion: OutfitSuggestion
     let onThumbsUp: () -> Void
     let onThumbsDown: () -> Void
-    let onSaveToLookbook: () -> Void
-
+    let onSave: () -> Void
     @State private var showTryOn = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Thumbs up/down
+        VStack(spacing: DS.spacingMD) {
+            // Thumbs
             HStack {
                 Spacer()
                 Button(action: onThumbsUp) {
                     Image(systemName: "hand.thumbsup")
+                        .font(.caption)
                         .foregroundStyle(.green)
                 }
                 Button(action: onThumbsDown) {
                     Image(systemName: "hand.thumbsdown")
+                        .font(.caption)
                         .foregroundStyle(.red)
                 }
             }
 
-            // Item collage
-            HStack(spacing: 8) {
+            // Items
+            HStack(spacing: DS.spacingSM) {
                 ForEach(suggestion.items, id: \.id) { item in
-                    ItemThumbnail(item: item, size: nil)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(0.75, contentMode: .fit)
-                }
-            }
-
-            // Item names
-            HStack {
-                ForEach(suggestion.items, id: \.id) { item in
-                    Text(item.name ?? item.subcategory.capitalized)
-                        .font(.caption)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
+                    VStack(spacing: DS.spacingXS) {
+                        ItemThumbnail(item: item, showConditionBadge: false)
+                            .aspectRatio(0.75, contentMode: .fit)
+                        Text(item.displayName)
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
 
             // Reason
-            Text(suggestion.reason)
+            Text(suggestion.primaryReason)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // Actions
-            HStack(spacing: 12) {
-                Button {
-                    showTryOn = true
-                } label: {
+            HStack(spacing: DS.spacingMD) {
+                Button { showTryOn = true } label: {
                     Label("Try On", systemImage: "person.fill")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GlassButtonStyle())
 
-                Button(action: onSaveToLookbook) {
+                Button(action: onSave) {
                     Label("Save", systemImage: "bookmark")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryButtonStyle())
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .glassCard()
         .sheet(isPresented: $showTryOn) {
             TryOnView(items: suggestion.items)
         }

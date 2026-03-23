@@ -2,134 +2,109 @@ import Foundation
 import UIKit
 import Vision
 
-class ImageService {
-
+actor ImageService {
     static let shared = ImageService()
-    private init() {}
 
-    // MARK: - Background Removal using Vision
+    // MARK: - Background Removal
 
     func removeBackground(from image: UIImage) async -> UIImage {
-        guard #available(iOS 17.0, *) else {
-            return image // Fallback: return original on iOS 16
+        guard #available(iOS 17.0, *), let cgImage = image.cgImage else {
+            return image
         }
 
-        return await withCheckedContinuation { continuation in
-            guard let cgImage = image.cgImage else {
-                continuation.resume(returning: image)
-                return
-            }
-
+        do {
             let request = VNGenerateForegroundInstanceMaskRequest()
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try handler.perform([request])
 
-            do {
-                try handler.perform([request])
-                guard let result = request.results?.first else {
-                    continuation.resume(returning: image)
-                    return
-                }
+            guard let result = request.results?.first else { return image }
 
-                let maskPixelBuffer = try result.generateScaledMaskForImage(
-                    forInstances: result.allInstances,
-                    from: handler
-                )
+            let mask = try result.generateScaledMaskForImage(
+                forInstances: result.allInstances,
+                from: handler
+            )
 
-                let ciImage = CIImage(cvPixelBuffer: maskPixelBuffer)
-                let originalCI = CIImage(cgImage: cgImage)
+            let ciMask = CIImage(cvPixelBuffer: mask)
+            let ciOriginal = CIImage(cgImage: cgImage)
+            let ciClear = CIImage(color: .clear).cropped(to: ciOriginal.extent)
 
-                let filter = CIFilter(name: "CIBlendWithMask")!
-                filter.setValue(originalCI, forKey: kCIInputImageKey)
-                filter.setValue(CIImage(color: .clear).cropped(to: originalCI.extent), forKey: kCIInputBackgroundImageKey)
-                filter.setValue(ciImage, forKey: kCIInputMaskImageKey)
+            guard let blendFilter = CIFilter(name: "CIBlendWithMask") else { return image }
+            blendFilter.setValue(ciOriginal, forKey: kCIInputImageKey)
+            blendFilter.setValue(ciClear, forKey: kCIInputBackgroundImageKey)
+            blendFilter.setValue(ciMask, forKey: kCIInputMaskImageKey)
 
-                let context = CIContext()
-                if let outputImage = filter.outputImage,
-                   let outputCG = context.createCGImage(outputImage, from: originalCI.extent) {
-                    continuation.resume(returning: UIImage(cgImage: outputCG))
-                } else {
-                    continuation.resume(returning: image)
-                }
-            } catch {
-                continuation.resume(returning: image)
+            let context = CIContext()
+            guard let output = blendFilter.outputImage,
+                  let outputCG = context.createCGImage(output, from: ciOriginal.extent) else {
+                return image
             }
+            return UIImage(cgImage: outputCG)
+        } catch {
+            return image
         }
     }
 
-    // MARK: - Image Saving
+    // MARK: - Save (nonisolated — no mutable actor state needed)
 
-    func saveItemPhoto(_ image: UIImage, fileName: String) throws -> URL {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let photosDir = documentsPath.appendingPathComponent("ItemPhotos")
-
-        try FileManager.default.createDirectory(at: photosDir, withIntermediateDirectories: true)
-
-        let fileURL = photosDir.appendingPathComponent(fileName)
+    nonisolated func saveItemPhoto(_ image: UIImage, fileName: String) throws {
+        try FileStorage.ensureDirectoryExists(FileStorage.itemPhotosDirectory)
+        let url = FileStorage.itemPhotoURL(fileName: fileName)
         guard let data = image.jpegData(compressionQuality: 0.85) else {
-            throw ImageError.compressionFailed
+            throw ImageServiceError.compressionFailed
         }
-        try data.write(to: fileURL)
-        return fileURL
+        try data.write(to: url)
     }
 
-    func saveAvatarPhoto(_ image: UIImage, fileName: String) throws -> URL {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let avatarDir = documentsPath.appendingPathComponent("AvatarPhotos")
-
-        try FileManager.default.createDirectory(at: avatarDir, withIntermediateDirectories: true)
-
-        let fileURL = avatarDir.appendingPathComponent(fileName)
+    nonisolated func saveAvatarPhoto(_ image: UIImage, fileName: String) throws {
+        try FileStorage.ensureDirectoryExists(FileStorage.avatarPhotosDirectory)
+        let url = FileStorage.avatarPhotoURL(fileName: fileName)
         guard let data = image.jpegData(compressionQuality: 0.9) else {
-            throw ImageError.compressionFailed
+            throw ImageServiceError.compressionFailed
         }
-        try data.write(to: fileURL)
-        return fileURL
+        try data.write(to: url)
     }
 
-    func saveTryOnRender(_ image: UIImage, fileName: String) throws -> URL {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let rendersDir = documentsPath.appendingPathComponent("TryOnRenders")
-
-        try FileManager.default.createDirectory(at: rendersDir, withIntermediateDirectories: true)
-
-        let fileURL = rendersDir.appendingPathComponent(fileName)
+    nonisolated func saveTryOnRender(_ image: UIImage) throws -> String {
+        try FileStorage.ensureDirectoryExists(FileStorage.tryOnRendersDirectory)
+        let fileName = "\(UUID().uuidString).jpg"
+        let url = FileStorage.tryOnRenderURL(fileName: fileName)
         guard let data = image.jpegData(compressionQuality: 0.9) else {
-            throw ImageError.compressionFailed
+            throw ImageServiceError.compressionFailed
         }
-        try data.write(to: fileURL)
-        return fileURL
+        try data.write(to: url)
+        return fileName
     }
 
-    func loadImage(from url: URL) -> UIImage? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
-    }
+    // MARK: - Collage
 
-    // MARK: - Collage Generation
+    nonisolated func generateFlatLayCollage(
+        items: [WardrobeItem],
+        size: CGSize = CGSize(width: 600, height: 800)
+    ) -> UIImage {
+        let images = items.compactMap { ImageCache.shared.load(from: $0.photoURL) }
+        guard !images.isEmpty else {
+            return UIImage()
+        }
 
-    func generateFlatLayCollage(items: [UIImage], size: CGSize = CGSize(width: 600, height: 800)) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { context in
+        return renderer.image { ctx in
             UIColor.systemBackground.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
+            ctx.fill(CGRect(origin: .zero, size: size))
 
-            let count = items.count
-            guard count > 0 else { return }
+            let columns = images.count <= 2 ? images.count : min(3, images.count)
+            let rows = (images.count + columns - 1) / columns
+            let itemW = size.width / CGFloat(columns)
+            let itemH = size.height / CGFloat(rows)
+            let pad: CGFloat = 8
 
-            let columns = count <= 2 ? count : min(3, count)
-            let rows = (count + columns - 1) / columns
-            let itemWidth = size.width / CGFloat(columns)
-            let itemHeight = size.height / CGFloat(rows)
-            let padding: CGFloat = 8
-
-            for (index, image) in items.enumerated() {
-                let col = index % columns
-                let row = index / columns
+            for (i, image) in images.enumerated() {
+                let col = i % columns
+                let row = i / columns
                 let rect = CGRect(
-                    x: CGFloat(col) * itemWidth + padding,
-                    y: CGFloat(row) * itemHeight + padding,
-                    width: itemWidth - padding * 2,
-                    height: itemHeight - padding * 2
+                    x: CGFloat(col) * itemW + pad,
+                    y: CGFloat(row) * itemH + pad,
+                    width: itemW - pad * 2,
+                    height: itemH - pad * 2
                 )
                 image.draw(in: rect)
             }
@@ -137,10 +112,8 @@ class ImageService {
     }
 }
 
-enum ImageError: LocalizedError {
+enum ImageServiceError: LocalizedError {
     case compressionFailed
 
-    var errorDescription: String? {
-        "Failed to process image."
-    }
+    var errorDescription: String? { "Failed to process image." }
 }

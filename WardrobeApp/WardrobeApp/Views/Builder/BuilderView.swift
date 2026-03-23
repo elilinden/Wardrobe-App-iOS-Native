@@ -3,8 +3,7 @@ import SwiftData
 
 struct BuilderView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<WardrobeItem> { !$0.isWishlist })
-    private var allItems: [WardrobeItem]
+    @Query(filter: #Predicate<WardrobeItem> { !$0.isWishlist }) private var allItems: [WardrobeItem]
 
     @State private var selectedTop: WardrobeItem?
     @State private var selectedBottom: WardrobeItem?
@@ -14,163 +13,40 @@ struct BuilderView: View {
     @State private var selectedAccessories: [WardrobeItem] = []
     @State private var activeCategory: Category = .top
     @State private var showTryOn = false
-    @State private var showSaveSheet = false
+    @State private var showSave = false
     @State private var showSettings = false
     @State private var outfitName = ""
+    @State private var showDatePicker = false
+    @State private var pinnedDate = Date()
 
     private var selectedItems: [WardrobeItem] {
-        var items: [WardrobeItem] = []
-        if let top = selectedTop { items.append(top) }
-        if let bottom = selectedBottom { items.append(bottom) }
-        if let dress = selectedDress { items.append(dress) }
-        if let outerwear = selectedOuterwear { items.append(outerwear) }
-        if let shoes = selectedShoes { items.append(shoes) }
-        items.append(contentsOf: selectedAccessories)
-        return items
+        [selectedTop, selectedBottom, selectedDress, selectedOuterwear, selectedShoes]
+            .compactMap { $0 } + selectedAccessories
     }
 
     private var categoryItems: [WardrobeItem] {
-        allItems.filter { item in
-            item.category == activeCategory &&
-            item.condition != .inStorage
-        }
+        allItems.filter { $0.category == activeCategory && $0.condition != .inStorage }
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Top half: collage preview
-                ZStack {
-                    Color(.systemGray6)
-
-                    if selectedItems.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "square.stack.3d.up")
-                                .font(.system(size: 50))
-                                .foregroundStyle(.quaternary)
-                            Text("Select items below to build an outfit")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        HStack(spacing: 8) {
-                            ForEach(selectedItems, id: \.id) { item in
-                                ItemThumbnail(item: item, size: nil)
-                                    .frame(maxWidth: .infinity)
-                                    .aspectRatio(0.7, contentMode: .fit)
-                                    .onTapGesture { removeItem(item) }
-                            }
-                        }
-                        .padding()
-                    }
-                }
-                .frame(maxHeight: .infinity)
-                .overlay(alignment: .topTrailing) {
-                    if !selectedItems.isEmpty {
-                        Button {
-                            showTryOn = true
-                        } label: {
-                            Label("Try On", systemImage: "person.fill")
-                                .font(.caption)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Capsule())
-                        }
-                        .padding()
-                    }
-                }
+                // Top: collage preview
+                collagePreview
+                    .frame(maxHeight: .infinity)
 
                 Divider()
 
-                // Bottom half: item selector
-                VStack(spacing: 0) {
-                    // Category tabs
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 4) {
-                            ForEach(Category.allCases) { category in
-                                Button {
-                                    activeCategory = category
-                                } label: {
-                                    Text(category.displayName)
-                                        .font(.subheadline)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(activeCategory == category ? Color.accentColor : Color(.systemGray5))
-                                        .foregroundStyle(activeCategory == category ? .white : .primary)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
+                // Bottom: item selector
+                itemSelector
+                    .frame(maxHeight: .infinity)
 
-                    // Items grid
-                    if categoryItems.isEmpty {
-                        VStack(spacing: 8) {
-                            Text("No \(activeCategory.displayName.lowercased()) in your closet")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxHeight: .infinity)
-                    } else {
-                        ScrollView {
-                            LazyVGrid(columns: [
-                                GridItem(.flexible()),
-                                GridItem(.flexible()),
-                                GridItem(.flexible()),
-                                GridItem(.flexible())
-                            ], spacing: 8) {
-                                ForEach(categoryItems, id: \.id) { item in
-                                    ItemThumbnail(item: item, size: nil)
-                                        .aspectRatio(0.8, contentMode: .fit)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .strokeBorder(
-                                                    isSelected(item) ? Color.accentColor : Color.clear,
-                                                    lineWidth: 3
-                                                )
-                                        )
-                                        .onTapGesture { selectItem(item) }
-                                }
-                            }
-                            .padding(.horizontal)
-                            .padding(.bottom, 16)
-                        }
-                    }
-                }
-                .frame(maxHeight: .infinity)
-
-                // Actions bar
+                // Action bar
                 if !selectedItems.isEmpty {
-                    HStack(spacing: 12) {
-                        Button { showSaveSheet = true } label: {
-                            Label("Save", systemImage: "bookmark")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Menu {
-                            Button {
-                                pinToCalendar()
-                            } label: {
-                                Label("Pin to Calendar", systemImage: "calendar.badge.plus")
-                            }
-                            Button {
-                                addToToday()
-                            } label: {
-                                Label("Add to Today", systemImage: "sun.max")
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .font(.title3)
-                        }
-                    }
-                    .padding()
-                    .background(.ultraThinMaterial)
+                    actionBar
                 }
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Builder")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -179,47 +55,186 @@ struct BuilderView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showTryOn) {
-                TryOnView(items: selectedItems)
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .alert("Save Outfit", isPresented: $showSaveSheet) {
-                TextField("Outfit name (optional)", text: $outfitName)
+            .sheet(isPresented: $showTryOn) { TryOnView(items: selectedItems) }
+            .sheet(isPresented: $showSettings) { SettingsView() }
+            .alert("Save Outfit", isPresented: $showSave) {
+                TextField("Name (optional)", text: $outfitName)
                 Button("Save") { saveOutfit() }
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) { outfitName = "" }
+            }
+            .sheet(isPresented: $showDatePicker) {
+                NavigationStack {
+                    DatePicker("Pin to Date", selection: $pinnedDate, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .padding()
+                        .navigationTitle("Pin to Calendar")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Pin") {
+                                    saveOutfit(planned: pinnedDate)
+                                    showDatePicker = false
+                                }
+                                .fontWeight(.semibold)
+                            }
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Cancel") { showDatePicker = false }
+                            }
+                        }
+                }
+                .presentationDetents([.medium])
             }
         }
     }
 
+    // MARK: - Collage Preview
+
+    private var collagePreview: some View {
+        ZStack {
+            if selectedItems.isEmpty {
+                VStack(spacing: DS.spacingMD) {
+                    Image(systemName: "square.stack.3d.up")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.quaternary)
+                    Text("Select items below to build an outfit")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: DS.spacingSM) {
+                    ForEach(selectedItems, id: \.id) { item in
+                        ItemThumbnail(item: item, showConditionBadge: false)
+                            .aspectRatio(0.65, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .overlay(alignment: .topTrailing) {
+                                Button { removeItem(item) } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.white, .red)
+                                }
+                                .padding(DS.spacingXS)
+                            }
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .padding(DS.spacingLG)
+                .animation(.spring(response: 0.35), value: selectedItems.map(\.id))
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if !selectedItems.isEmpty {
+                Button { showTryOn = true } label: {
+                    Label("Try On", systemImage: "person.fill")
+                        .font(.caption.weight(.medium))
+                }
+                .glassPill(isSelected: true)
+                .padding(DS.spacingMD)
+            }
+        }
+    }
+
+    // MARK: - Item Selector
+
+    private var itemSelector: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DS.spacingXS) {
+                    ForEach(Category.allCases) { cat in
+                        GlassChip(title: cat.displayName, isSelected: activeCategory == cat) {
+                            activeCategory = cat
+                        }
+                    }
+                }
+                .padding(.horizontal, DS.spacingLG)
+                .padding(.vertical, DS.spacingSM)
+            }
+
+            if categoryItems.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No \(activeCategory.displayName.lowercased()) available")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: DS.gridColumns4, spacing: DS.spacingSM) {
+                        ForEach(categoryItems, id: \.id) { item in
+                            ItemThumbnail(item: item, showConditionBadge: false)
+                                .aspectRatio(0.8, contentMode: .fit)
+                                .overlay {
+                                    if isSelected(item) {
+                                        RoundedRectangle(cornerRadius: DS.radiusSM)
+                                            .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                                    }
+                                }
+                                .onTapGesture { selectItem(item) }
+                        }
+                    }
+                    .padding(.horizontal, DS.spacingLG)
+                    .padding(.bottom, DS.spacingLG)
+                }
+            }
+        }
+    }
+
+    // MARK: - Action Bar
+
+    private var actionBar: some View {
+        HStack(spacing: DS.spacingMD) {
+            Button { showSave = true } label: {
+                Label("Save", systemImage: "bookmark")
+            }
+            .buttonStyle(GlassButtonStyle())
+
+            Menu {
+                Button { showDatePicker = true } label: {
+                    Label("Pin to Calendar", systemImage: "calendar.badge.plus")
+                }
+                Button {
+                    let outfit = Outfit(itemIDs: selectedItems.map(\.id), plannedDate: Date())
+                    modelContext.insert(outfit)
+                    try? modelContext.save()
+                    Haptic.success()
+                } label: {
+                    Label("Add to Today", systemImage: "sun.max")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+            }
+        }
+        .padding(DS.spacingLG)
+        .glassBackground(cornerRadius: 0)
+    }
+
+    // MARK: - Logic
+
     private func isSelected(_ item: WardrobeItem) -> Bool {
-        selectedItems.contains(where: { $0.id == item.id })
+        selectedItems.contains { $0.id == item.id }
     }
 
     private func selectItem(_ item: WardrobeItem) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptic.selection()
         switch item.category {
-        case .top:
-            selectedTop = selectedTop?.id == item.id ? nil : item
-        case .bottom:
-            selectedBottom = selectedBottom?.id == item.id ? nil : item
-        case .dress:
-            selectedDress = selectedDress?.id == item.id ? nil : item
-        case .outerwear:
-            selectedOuterwear = selectedOuterwear?.id == item.id ? nil : item
-        case .shoes:
-            selectedShoes = selectedShoes?.id == item.id ? nil : item
+        case .top: selectedTop = selectedTop?.id == item.id ? nil : item
+        case .bottom: selectedBottom = selectedBottom?.id == item.id ? nil : item
+        case .dress: selectedDress = selectedDress?.id == item.id ? nil : item
+        case .outerwear: selectedOuterwear = selectedOuterwear?.id == item.id ? nil : item
+        case .shoes: selectedShoes = selectedShoes?.id == item.id ? nil : item
         case .accessory:
-            if let index = selectedAccessories.firstIndex(where: { $0.id == item.id }) {
-                selectedAccessories.remove(at: index)
-            } else if selectedAccessories.count < 3 {
+            if let idx = selectedAccessories.firstIndex(where: { $0.id == item.id }) {
+                selectedAccessories.remove(at: idx)
+            } else if selectedAccessories.count < DS.maxAccessories {
                 selectedAccessories.append(item)
             }
         }
     }
 
     private func removeItem(_ item: WardrobeItem) {
+        Haptic.light()
         switch item.category {
         case .top: selectedTop = nil
         case .bottom: selectedBottom = nil
@@ -230,28 +245,15 @@ struct BuilderView: View {
         }
     }
 
-    private func saveOutfit() {
+    private func saveOutfit(planned: Date? = nil) {
         let outfit = Outfit(
             name: outfitName.isEmpty ? nil : outfitName,
-            itemIDs: selectedItems.map(\.id)
+            itemIDs: selectedItems.map(\.id),
+            plannedDate: planned
         )
         modelContext.insert(outfit)
         try? modelContext.save()
         outfitName = ""
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    }
-
-    private func pinToCalendar() {
-        // In a full implementation, this would open a date picker
-        saveOutfit()
-    }
-
-    private func addToToday() {
-        let outfit = Outfit(
-            itemIDs: selectedItems.map(\.id),
-            plannedDate: Date()
-        )
-        modelContext.insert(outfit)
-        try? modelContext.save()
+        Haptic.success()
     }
 }

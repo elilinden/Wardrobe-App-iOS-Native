@@ -7,9 +7,7 @@ enum ClosetSegment: String, CaseIterable {
 }
 
 enum ClosetViewMode: String, CaseIterable {
-    case grid = "Grid"
-    case list = "List"
-    case colorWall = "Color Wall"
+    case grid, list, colorWall
 
     var icon: String {
         switch self {
@@ -18,22 +16,25 @@ enum ClosetViewMode: String, CaseIterable {
         case .colorWall: return "paintpalette"
         }
     }
+
+    var label: String {
+        switch self {
+        case .grid: return "Grid"
+        case .list: return "List"
+        case .colorWall: return "Color Wall"
+        }
+    }
 }
 
 struct ClosetView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<WardrobeItem> { !$0.isWishlist },
-           sort: \WardrobeItem.dateAdded, order: .reverse)
-    private var closetItems: [WardrobeItem]
-
-    @Query(filter: #Predicate<WardrobeItem> { $0.isWishlist },
-           sort: \WardrobeItem.dateAdded, order: .reverse)
-    private var wishlistItems: [WardrobeItem]
+    @EnvironmentObject private var appState: AppState
+    @Query(sort: \WardrobeItem.dateAdded, order: .reverse) private var allItems: [WardrobeItem]
 
     @State private var segment: ClosetSegment = .myCloset
     @State private var viewMode: ClosetViewMode = .grid
     @State private var searchText = ""
-    @State private var showFilterSheet = false
+    @State private var showFilters = false
     @State private var showAddItem = false
     @State private var showSettings = false
     @State private var selectedItem: WardrobeItem?
@@ -45,112 +46,81 @@ struct ClosetView: View {
     @State private var filterFormalities: Set<Formality> = []
     @State private var filterConditions: Set<ItemCondition> = []
 
+    private var hasActiveFilters: Bool {
+        !filterCategories.isEmpty || !filterColors.isEmpty ||
+        !filterSeasons.isEmpty || !filterFormalities.isEmpty ||
+        !filterConditions.isEmpty
+    }
+
     private var currentItems: [WardrobeItem] {
-        segment == .myCloset ? closetItems : wishlistItems
+        allItems.filter { segment == .myCloset ? !$0.isWishlist : $0.isWishlist }
     }
 
     private var filteredItems: [WardrobeItem] {
         currentItems.filter { item in
-            // Search
             if !searchText.isEmpty {
-                let query = searchText.lowercased()
-                let matches = (item.name?.lowercased().contains(query) ?? false) ||
-                    (item.brand?.lowercased().contains(query) ?? false) ||
-                    item.primaryColor.lowercased().contains(query) ||
-                    item.categoryRaw.lowercased().contains(query) ||
-                    item.subcategory.lowercased().contains(query)
-                if !matches { return false }
+                let q = searchText.lowercased()
+                let match = (item.name?.lowercased().contains(q) ?? false) ||
+                    (item.brand?.lowercased().contains(q) ?? false) ||
+                    item.primaryColor.lowercased().contains(q) ||
+                    item.categoryRaw.contains(q) ||
+                    item.subcategory.lowercased().contains(q)
+                if !match { return false }
             }
-
-            // Category filter
-            if !filterCategories.isEmpty && !filterCategories.contains(item.category) {
-                return false
-            }
-
-            // Color filter
-            if !filterColors.isEmpty && !filterColors.contains(item.primaryColor.lowercased()) {
-                return false
-            }
-
-            // Season filter
-            if !filterSeasons.isEmpty && item.seasons.allSatisfy({ !filterSeasons.contains($0) }) {
-                return false
-            }
-
-            // Formality filter
-            if !filterFormalities.isEmpty && !filterFormalities.contains(item.formality) {
-                return false
-            }
-
-            // Condition filter
-            if !filterConditions.isEmpty && !filterConditions.contains(item.condition) {
-                return false
-            }
-
+            if !filterCategories.isEmpty && !filterCategories.contains(item.category) { return false }
+            if !filterColors.isEmpty && !filterColors.contains(item.primaryColor.lowercased()) { return false }
+            if !filterSeasons.isEmpty && item.seasons.allSatisfy({ !filterSeasons.contains($0) }) { return false }
+            if !filterFormalities.isEmpty && !filterFormalities.contains(item.formality) { return false }
+            if !filterConditions.isEmpty && !filterConditions.contains(item.condition) { return false }
             return true
         }
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Segment control
-                Picker("", selection: $segment) {
-                    ForEach(ClosetSegment.allCases, id: \.self) { seg in
-                        Text(seg.rawValue).tag(seg)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 8)
+            ZStack {
+                MeshGradientBackground()
 
-                if filteredItems.isEmpty {
-                    emptyState
-                } else {
-                    switch viewMode {
-                    case .grid:
-                        gridView
-                    case .list:
-                        listView
-                    case .colorWall:
-                        colorWallView
+                VStack(spacing: 0) {
+                    // Segment
+                    Picker("", selection: $segment) {
+                        ForEach(ClosetSegment.allCases, id: \.self) { s in
+                            Text(s.rawValue).tag(s)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, DS.spacingLG)
+                    .padding(.vertical, DS.spacingSM)
+
+                    // Nudge banner
+                    if appState.showClosetNudgeBanner && segment == .myCloset {
+                        nudgeBanner
+                    }
+
+                    // Content
+                    if filteredItems.isEmpty {
+                        EmptyStateView(
+                            icon: segment == .myCloset ? "tshirt" : "heart",
+                            title: segment == .myCloset ? "Your wardrobe starts here." : "Your wishlist is empty.",
+                            subtitle: segment == .myCloset
+                                ? "Add your first item to get started."
+                                : "Share items from Safari or other apps.",
+                            actionTitle: segment == .myCloset ? "Add Item" : nil,
+                            action: segment == .myCloset ? { showAddItem = true } : nil
+                        )
+                    } else {
+                        switch viewMode {
+                        case .grid: gridView
+                        case .list: listView
+                        case .colorWall: colorWallView
+                        }
                     }
                 }
             }
             .navigationTitle("Closet")
             .searchable(text: $searchText, prompt: "Search by color, category, brand...")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        ForEach(ClosetViewMode.allCases, id: \.self) { mode in
-                            Button {
-                                viewMode = mode
-                            } label: {
-                                Label(mode.rawValue, systemImage: mode.icon)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: viewMode.icon)
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        Button { showFilterSheet = true } label: {
-                            Image(systemName: "line.3.horizontal.decrease.circle")
-                        }
-
-                        Button { showAddItem = true } label: {
-                            Image(systemName: "plus")
-                        }
-
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gearshape")
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showFilterSheet) {
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showFilters) {
                 FilterSheetView(
                     selectedCategories: $filterCategories,
                     selectedColors: $filterColors,
@@ -159,222 +129,180 @@ struct ClosetView: View {
                     selectedConditions: $filterConditions
                 )
             }
-            .sheet(isPresented: $showAddItem) {
-                AddItemMenuView()
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .sheet(item: $selectedItem) { item in
-                ItemDetailView(item: item)
+            .sheet(isPresented: $showAddItem) { AddItemMenuView() }
+            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(item: $selectedItem) { item in ItemDetailView(item: item) }
+            .onAppear {
+                appState.closetItemCount = allItems.filter { !$0.isWishlist }.count
             }
         }
     }
 
-    // MARK: - Empty State
+    // MARK: - Toolbar
 
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: segment == .myCloset ? "tshirt" : "heart")
-                .font(.system(size: 60))
-                .foregroundStyle(.quaternary)
-
-            if segment == .myCloset {
-                Text("Your wardrobe starts here.")
-                    .font(.title3)
-                    .fontWeight(.medium)
-                Text("Add your first item.")
-                    .foregroundStyle(.secondary)
-                Button("Add Item") { showAddItem = true }
-                    .buttonStyle(.borderedProminent)
-            } else {
-                Text("Your wishlist is empty.")
-                    .font(.title3)
-                    .fontWeight(.medium)
-                Text("Share items from Safari or other apps to add them here.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                ForEach(ClosetViewMode.allCases, id: \.self) { mode in
+                    Button {
+                        viewMode = mode
+                        Haptic.selection()
+                    } label: {
+                        Label(mode.label, systemImage: mode.icon)
+                    }
+                }
+            } label: {
+                Image(systemName: viewMode.icon)
             }
-            Spacer()
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: DS.spacingMD) {
+                Button { showFilters = true } label: {
+                    Image(systemName: hasActiveFilters
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
+                }
+
+                Button { showAddItem = true } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
         }
     }
 
-    // MARK: - Grid View
+    // MARK: - Nudge Banner
+
+    private var nudgeBanner: some View {
+        HStack(spacing: DS.spacingMD) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(.accent)
+            Text("Add at least 5 items to unlock outfit suggestions")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(DS.spacingMD)
+        .glassBackground(cornerRadius: DS.radiusMD)
+        .padding(.horizontal, DS.spacingLG)
+        .padding(.bottom, DS.spacingSM)
+    }
+
+    // MARK: - Grid
 
     private var gridView: some View {
         ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ], spacing: 12) {
+            LazyVGrid(columns: DS.gridColumns3, spacing: DS.spacingMD) {
                 ForEach(filteredItems, id: \.id) { item in
                     ItemCardView(item: item)
-                        .onTapGesture { selectedItem = item }
-                        .contextMenu {
-                            itemContextMenu(item: item)
+                        .onTapGesture {
+                            selectedItem = item
+                            Haptic.selection()
                         }
+                        .contextMenu { itemContextMenu(item) }
                 }
             }
-            .padding()
+            .padding(DS.spacingLG)
         }
     }
 
-    // MARK: - List View
+    // MARK: - List
 
     private var listView: some View {
         List(filteredItems, id: \.id) { item in
-            HStack(spacing: 12) {
-                ItemThumbnail(item: item, size: 60)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name ?? item.subcategory.capitalized)
-                        .font(.headline)
-                    Text(item.category.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let brand = item.brand {
-                        Text(brand)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            HStack(spacing: DS.spacingMD) {
+                ItemThumbnail(item: item, size: 56)
+                VStack(alignment: .leading, spacing: DS.spacingXS) {
+                    Text(item.displayName)
+                        .font(.subheadline.weight(.medium))
+                    HStack(spacing: DS.spacingXS) {
+                        Text(item.category.displayName)
+                        if let brand = item.brand { Text("· \(brand)") }
                     }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if item.condition != .clean {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                    Image(systemName: item.condition.icon)
                         .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
             .contentShape(Rectangle())
             .onTapGesture { selectedItem = item }
+            .listRowBackground(Color.clear)
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
+                    item.cleanupPhoto()
                     modelContext.delete(item)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
+                } label: { Label("Delete", systemImage: "trash") }
+
                 Button {
-                    item.condition = .inStorage
-                } label: {
-                    Label("Storage", systemImage: "archivebox")
-                }
-                .tint(.blue)
+                    item.moveToStorage()
+                } label: { Label("Storage", systemImage: "archivebox") }
+                    .tint(.blue)
             }
             .swipeActions(edge: .leading) {
                 Button {
-                    item.timesWorn += 1
-                    item.lastWorn = Date()
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    Label("Worn Today", systemImage: "checkmark.circle")
-                }
-                .tint(.green)
+                    item.markWornToday()
+                } label: { Label("Worn", systemImage: "checkmark.circle") }
+                    .tint(.green)
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
-    // MARK: - Color Wall View
+    // MARK: - Color Wall
 
     private var colorWallView: some View {
         let grouped = Dictionary(grouping: filteredItems) { $0.primaryColor.lowercased() }
         let sortedColors = grouped.keys.sorted()
 
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: DS.spacingLG) {
                 ForEach(sortedColors, id: \.self) { color in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.spacingSM) {
                         Text(color.capitalized)
                             .font(.headline)
-                            .padding(.horizontal)
+                            .padding(.horizontal, DS.spacingLG)
 
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: DS.spacingSM) {
                                 ForEach(grouped[color] ?? [], id: \.id) { item in
-                                    ItemThumbnail(item: item, size: 80)
+                                    ItemThumbnail(item: item, size: 72)
                                         .onTapGesture { selectedItem = item }
                                 }
                             }
-                            .padding(.horizontal)
+                            .padding(.horizontal, DS.spacingLG)
                         }
                     }
                 }
             }
-            .padding(.vertical)
+            .padding(.vertical, DS.spacingLG)
         }
     }
 
     @ViewBuilder
-    private func itemContextMenu(item: WardrobeItem) -> some View {
-        Button {
-            item.timesWorn += 1
-            item.lastWorn = Date()
-        } label: {
+    private func itemContextMenu(_ item: WardrobeItem) -> some View {
+        Button { item.markWornToday() } label: {
             Label("Mark Worn Today", systemImage: "checkmark.circle")
         }
-
-        Button {
-            item.condition = .inStorage
-        } label: {
+        Button { item.moveToStorage() } label: {
             Label("Move to Storage", systemImage: "archivebox")
         }
-
+        Divider()
         Button(role: .destructive) {
+            item.cleanupPhoto()
             modelContext.delete(item)
         } label: {
             Label("Delete", systemImage: "trash")
-        }
-    }
-}
-
-struct ItemCardView: View {
-    let item: WardrobeItem
-
-    var body: some View {
-        VStack(spacing: 4) {
-            ItemThumbnail(item: item, size: nil)
-                .aspectRatio(0.8, contentMode: .fit)
-
-            Text(item.name ?? item.subcategory.capitalized)
-                .font(.caption)
-                .lineLimit(1)
-
-            Text(item.category.displayName)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-struct ItemThumbnail: View {
-    let item: WardrobeItem
-    let size: CGFloat?
-
-    var body: some View {
-        Group {
-            if let image = ImageService.shared.loadImage(from: item.photoURL) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    Color(.systemGray5)
-                    Image(systemName: "tshirt")
-                        .foregroundStyle(.quaternary)
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(alignment: .topTrailing) {
-            if item.condition != .clean {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-                    .padding(4)
-            }
         }
     }
 }

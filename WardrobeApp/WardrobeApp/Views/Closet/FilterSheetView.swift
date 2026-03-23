@@ -8,80 +8,53 @@ struct FilterSheetView: View {
     @Binding var selectedConditions: Set<ItemCondition>
     @Environment(\.dismiss) private var dismiss
 
-    let colorOptions = ["black", "white", "navy", "gray", "brown", "beige",
-                        "red", "pink", "orange", "yellow", "green", "blue", "purple"]
+    private let colorOptions = [
+        "black", "white", "navy", "gray", "brown", "beige",
+        "red", "pink", "orange", "yellow", "green", "blue", "purple"
+    ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Category
-                    FilterSection(title: "Category") {
-                        FlowLayout(spacing: 8) {
-                            ForEach(Category.allCases) { cat in
-                                FilterChip(
-                                    title: cat.displayName,
-                                    isSelected: selectedCategories.contains(cat),
-                                    onTap: { toggleSet(&selectedCategories, cat) }
-                                )
-                            }
-                        }
+                VStack(alignment: .leading, spacing: DS.spacingXL) {
+                    filterSection("Category") {
+                        GlassMultiChipSelector(
+                            options: Category.allCases.map { ($0.displayName, $0) },
+                            selected: $selectedCategories
+                        )
                     }
 
-                    // Color
-                    FilterSection(title: "Color") {
-                        FlowLayout(spacing: 8) {
-                            ForEach(colorOptions, id: \.self) { color in
-                                FilterChip(
-                                    title: color.capitalized,
-                                    isSelected: selectedColors.contains(color),
-                                    onTap: { toggleSet(&selectedColors, color) }
-                                )
-                            }
-                        }
+                    filterSection("Color") {
+                        GlassMultiChipSelector(
+                            options: colorOptions.map { ($0.capitalized, $0) },
+                            selected: $selectedColors
+                        )
                     }
 
-                    // Season
-                    FilterSection(title: "Season") {
-                        FlowLayout(spacing: 8) {
-                            ForEach(Season.allCases, id: \.self) { season in
-                                FilterChip(
-                                    title: season.displayName,
-                                    isSelected: selectedSeasons.contains(season),
-                                    onTap: { toggleSet(&selectedSeasons, season) }
-                                )
-                            }
-                        }
+                    filterSection("Season") {
+                        GlassMultiChipSelector(
+                            options: Season.allCases.map { ($0.displayName, $0) },
+                            selected: $selectedSeasons
+                        )
                     }
 
-                    // Formality
-                    FilterSection(title: "Formality") {
-                        FlowLayout(spacing: 8) {
-                            ForEach(Formality.allCases, id: \.self) { formality in
-                                FilterChip(
-                                    title: formality.displayName,
-                                    isSelected: selectedFormalities.contains(formality),
-                                    onTap: { toggleSet(&selectedFormalities, formality) }
-                                )
-                            }
-                        }
+                    filterSection("Formality") {
+                        GlassMultiChipSelector(
+                            options: Formality.allCases.map { ($0.displayName, $0) },
+                            selected: $selectedFormalities
+                        )
                     }
 
-                    // Condition
-                    FilterSection(title: "Condition") {
-                        FlowLayout(spacing: 8) {
-                            ForEach(ItemCondition.allCases, id: \.self) { condition in
-                                FilterChip(
-                                    title: condition.displayName,
-                                    isSelected: selectedConditions.contains(condition),
-                                    onTap: { toggleSet(&selectedConditions, condition) }
-                                )
-                            }
-                        }
+                    filterSection("Condition") {
+                        GlassMultiChipSelector(
+                            options: ItemCondition.allCases.map { ($0.displayName, $0) },
+                            selected: $selectedConditions
+                        )
                     }
                 }
-                .padding()
+                .padding(DS.spacingLG)
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Filters")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -92,54 +65,26 @@ struct FilterSheetView: View {
                         selectedSeasons.removeAll()
                         selectedFormalities.removeAll()
                         selectedConditions.removeAll()
+                        Haptic.light()
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Apply") { dismiss() }
-                        .fontWeight(.semibold)
+                    Button("Apply") {
+                        Haptic.light()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
                 }
             }
         }
         .presentationDetents([.medium, .large])
     }
 
-    private func toggleSet<T: Hashable>(_ set: inout Set<T>, _ value: T) {
-        if set.contains(value) {
-            set.remove(value)
-        } else {
-            set.insert(value)
-        }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    }
-}
-
-struct FilterSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func filterSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: DS.spacingMD) {
             Text(title)
                 .font(.headline)
-            content
-        }
-    }
-}
-
-struct FilterChip: View {
-    let title: String
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            Text(title)
-                .font(.subheadline)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.accentColor : Color(.systemGray5))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .clipShape(Capsule())
+            content()
         }
     }
 }

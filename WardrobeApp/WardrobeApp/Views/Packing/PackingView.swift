@@ -14,17 +14,24 @@ struct PackingView: View {
         NavigationStack {
             Group {
                 if trips.isEmpty {
-                    emptyState
+                    EmptyStateView(
+                        icon: "suitcase",
+                        title: "Plan your next trip",
+                        subtitle: "Build a smart packing list based on your destination and activities.",
+                        actionTitle: "Start a Trip",
+                        action: { showNewTrip = true }
+                    )
                 } else {
-                    tripsList
+                    tripList
                 }
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("Packing")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: DS.spacingMD) {
                         Button { showNewTrip = true } label: {
-                            Image(systemName: "plus")
+                            Image(systemName: "plus.circle.fill")
                         }
                         Button { showSettings = true } label: {
                             Image(systemName: "gearshape")
@@ -32,84 +39,69 @@ struct PackingView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showNewTrip) {
-                TripSetupView(allItems: items)
-            }
-            .sheet(item: $selectedTrip) { trip in
-                PackingResultsView(trip: trip, allItems: items)
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
+            .sheet(isPresented: $showNewTrip) { TripSetupView(allItems: items) }
+            .sheet(item: $selectedTrip) { trip in PackingResultsView(trip: trip, allItems: items) }
+            .sheet(isPresented: $showSettings) { SettingsView() }
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "suitcase")
-                .font(.system(size: 60))
-                .foregroundStyle(.quaternary)
-            Text("Plan your next trip packing list.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Button("Start a Trip") { showNewTrip = true }
-                .buttonStyle(.borderedProminent)
-            Spacer()
-        }
-    }
+    private var tripList: some View {
+        ScrollView {
+            LazyVStack(spacing: DS.spacingMD) {
+                ForEach(trips, id: \.id) { trip in
+                    Button { selectedTrip = trip } label: {
+                        VStack(alignment: .leading, spacing: DS.spacingSM) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: DS.spacingXS) {
+                                    Text(trip.displayName)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text(trip.destination)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: DS.spacingXS) {
+                                    Text("\(trip.numberOfDays) days")
+                                        .font(.caption.weight(.medium))
+                                    Text("\(trip.packedItemIDs.count) items")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
 
-    private var tripsList: some View {
-        List(trips, id: \.id) { trip in
-            Button {
-                selectedTrip = trip
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(trip.name.isEmpty ? trip.destination : trip.name)
-                        .font(.headline)
-                    Text(trip.destination)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                            Text(trip.dateRangeFormatted)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
 
-                    HStack {
-                        let formatter = DateFormatter()
-                        Text({
-                            formatter.dateStyle = .short
-                            return "\(formatter.string(from: trip.startDate)) - \(formatter.string(from: trip.endDate))"
-                        }())
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        Text("\(trip.packedItemIDs.count) items")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    FlowLayout(spacing: 4) {
-                        ForEach(trip.activities, id: \.self) { activity in
-                            Text(activity.displayName)
-                                .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color(.systemGray5))
-                                .clipShape(Capsule())
+                            FlowLayout(spacing: DS.spacingXS) {
+                                ForEach(trip.activities, id: \.self) { activity in
+                                    HStack(spacing: DS.spacingXS) {
+                                        Image(systemName: activity.icon)
+                                            .font(.caption2)
+                                        Text(activity.displayName)
+                                    }
+                                    .font(.caption2)
+                                    .glassPill()
+                                }
+                            }
                         }
+                        .glassCard()
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            modelContext.delete(trip)
+                        } label: { Label("Delete", systemImage: "trash") }
                     }
                 }
             }
-            .swipeActions(edge: .trailing) {
-                Button(role: .destructive) {
-                    modelContext.delete(trip)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
+            .padding(DS.spacingLG)
         }
-        .listStyle(.plain)
     }
 }
+
+// MARK: - Trip Setup
 
 struct TripSetupView: View {
     let allItems: [WardrobeItem]
@@ -117,57 +109,63 @@ struct TripSetupView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var destination = ""
+    @State private var tripName = ""
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date()
     @State private var selectedActivities: Set<Activity> = []
-    @State private var tripName = ""
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Trip Details") {
-                    TextField("Destination", text: $destination)
-                    TextField("Trip Name (optional)", text: $tripName)
-                    DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
-                    DatePicker("End Date", selection: $endDate, in: startDate..., displayedComponents: .date)
-                }
-
-                Section("Activities") {
-                    FlowLayout(spacing: 8) {
-                        ForEach(Activity.allCases, id: \.self) { activity in
-                            FilterChip(
-                                title: activity.displayName,
-                                isSelected: selectedActivities.contains(activity),
-                                onTap: {
-                                    if selectedActivities.contains(activity) {
-                                        selectedActivities.remove(activity)
-                                    } else {
-                                        selectedActivities.insert(activity)
-                                    }
-                                }
-                            )
+            ScrollView {
+                VStack(spacing: DS.spacingXL) {
+                    VStack(spacing: DS.spacingMD) {
+                        VStack(alignment: .leading, spacing: DS.spacingSM) {
+                            Text("Destination").font(.caption).foregroundStyle(.secondary)
+                            TextField("City or country", text: $destination)
+                                .textFieldStyle(.roundedBorder)
                         }
+
+                        VStack(alignment: .leading, spacing: DS.spacingSM) {
+                            Text("Trip Name").font(.caption).foregroundStyle(.secondary)
+                            TextField("Optional", text: $tripName)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
+                        DatePicker("End Date", selection: $endDate, in: startDate..., displayedComponents: .date)
                     }
+                    .glassCard()
+
+                    VStack(alignment: .leading, spacing: DS.spacingMD) {
+                        Text("Activities").font(.headline)
+                        GlassMultiChipSelector(
+                            options: Activity.allCases.map { ($0.displayName, $0) },
+                            selected: $selectedActivities
+                        )
+                    }
+                    .glassCard()
+
+                    Button(action: buildList) {
+                        Label("Build My Packing List", systemImage: "suitcase")
+                    }
+                    .buttonStyle(GlassButtonStyle())
+                    .disabled(destination.isEmpty)
+                    .opacity(destination.isEmpty ? 0.5 : 1)
                 }
+                .padding(DS.spacingLG)
             }
+            .background { MeshGradientBackground() }
             .navigationTitle("New Trip")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Build List") {
-                        buildPackingList()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(destination.isEmpty)
-                }
             }
         }
     }
 
-    private func buildPackingList() {
+    private func buildList() {
         let trip = PackingTrip(
             name: tripName.isEmpty ? destination : tripName,
             destination: destination,
@@ -176,58 +174,39 @@ struct TripSetupView: View {
             activities: Array(selectedActivities)
         )
 
-        // Auto-select items based on activities
-        let suggestedItems = suggestPackingItems()
-        trip.packedItemIDs = suggestedItems.map(\.id)
+        let suggested = suggestItems(for: trip)
+        trip.packedItemIDs = suggested.map(\.id)
 
         modelContext.insert(trip)
         try? modelContext.save()
+        Haptic.success()
         dismiss()
     }
 
-    private func suggestPackingItems() -> [WardrobeItem] {
-        let numberOfDays = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 3
+    private func suggestItems(for trip: PackingTrip) -> [WardrobeItem] {
+        let available = allItems.filter { $0.condition == .clean }
+        let days = trip.numberOfDays
         var selected: [WardrobeItem] = []
 
-        let available = allItems.filter { $0.condition == .clean }
-
-        // Determine needed formalities based on activities
-        var neededFormalities: Set<Formality> = [.casual]
+        var needed: Set<Formality> = [.casual]
         for activity in selectedActivities {
-            switch activity {
-            case .businessMeetings, .formalEvents, .fineDining:
-                neededFormalities.insert(.formal)
-                neededFormalities.insert(.smartCasual)
-            case .hiking, .active, .beach:
-                neededFormalities.insert(.athletic)
-                neededFormalities.insert(.casual)
-            case .cityExploring, .casualDinners:
-                neededFormalities.insert(.casual)
-                neededFormalities.insert(.smartCasual)
-            }
+            needed.formUnion(activity.requiredFormalities)
         }
 
-        // Select tops (more than bottoms for variety)
-        let tops = available.filter { $0.category == .top && neededFormalities.contains($0.formality) }
-        let topCount = min(tops.count, max(3, numberOfDays))
-        selected.append(contentsOf: tops.prefix(topCount))
+        let tops = available.filter { $0.category == .top && needed.contains($0.formality) }
+        selected.append(contentsOf: tops.prefix(min(tops.count, max(3, days))))
 
-        // Select bottoms (fewer, for mix-and-match)
-        let bottoms = available.filter { $0.category == .bottom && neededFormalities.contains($0.formality) }
-        let bottomCount = min(bottoms.count, max(2, numberOfDays / 2 + 1))
-        selected.append(contentsOf: bottoms.prefix(bottomCount))
+        let bottoms = available.filter { $0.category == .bottom && needed.contains($0.formality) }
+        selected.append(contentsOf: bottoms.prefix(min(bottoms.count, max(2, days / 2 + 1))))
 
-        // Dresses if relevant
         if selectedActivities.contains(.fineDining) || selectedActivities.contains(.formalEvents) {
             let dresses = available.filter { $0.category == .dress }
             selected.append(contentsOf: dresses.prefix(1))
         }
 
-        // Outerwear
         let outerwear = available.filter { $0.category == .outerwear }
         selected.append(contentsOf: outerwear.prefix(1))
 
-        // Shoes
         let shoes = available.filter { $0.category == .shoes }
         selected.append(contentsOf: shoes.prefix(min(2, shoes.count)))
 
@@ -235,43 +214,44 @@ struct TripSetupView: View {
     }
 }
 
+// MARK: - Packing Results
+
 struct PackingResultsView: View {
     @Bindable var trip: PackingTrip
     let allItems: [WardrobeItem]
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-
     @State private var showChecklist = false
 
     private var packedItems: [WardrobeItem] {
-        trip.packedItemIDs.compactMap { id in
-            allItems.first(where: { $0.id == id })
-        }
+        trip.packedItemIDs.compactMap { id in allItems.first { $0.id == id } }
     }
 
-    private var groupedItems: [(Category, [WardrobeItem])] {
-        let grouped = Dictionary(grouping: packedItems) { $0.category }
-        return Category.allCases.compactMap { category in
-            guard let items = grouped[category], !items.isEmpty else { return nil }
-            return (category, items)
+    private var grouped: [(Category, [WardrobeItem])] {
+        let dict = Dictionary(grouping: packedItems) { $0.category }
+        return Category.allCases.compactMap { cat in
+            guard let items = dict[cat], !items.isEmpty else { return nil }
+            return (cat, items)
         }
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Toggle
-                Toggle("View as Checklist", isOn: $showChecklist)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                HStack {
+                    Toggle("Checklist Mode", isOn: $showChecklist)
+                        .font(.subheadline)
+                }
+                .padding(.horizontal, DS.spacingLG)
+                .padding(.vertical, DS.spacingSM)
 
                 if showChecklist {
                     checklistView
                 } else {
-                    itemsView
+                    detailView
                 }
             }
-            .navigationTitle(trip.name)
+            .background { MeshGradientBackground() }
+            .navigationTitle(trip.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -281,100 +261,91 @@ struct PackingResultsView: View {
         }
     }
 
-    private var itemsView: some View {
+    private var detailView: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: DS.spacingXL) {
                 // Trip info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(trip.destination)
+                VStack(alignment: .leading, spacing: DS.spacingSM) {
+                    Label(trip.destination, systemImage: "mappin.and.ellipse")
                         .font(.headline)
-                    let formatter = DateFormatter()
-                    Text({
-                        formatter.dateStyle = .medium
-                        return "\(formatter.string(from: trip.startDate)) - \(formatter.string(from: trip.endDate))"
-                    }())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                    Text("\(trip.numberOfDays) days, \(packedItems.count) items")
+                    Text(trip.dateRangeFormatted)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(trip.numberOfDays) days · \(packedItems.count) items")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal)
+                .glassCard()
 
                 // Items by category
-                ForEach(groupedItems, id: \.0) { category, categoryItems in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(category.displayName)
-                            .font(.headline)
-                            .padding(.horizontal)
+                ForEach(grouped, id: \.0) { category, categoryItems in
+                    VStack(alignment: .leading, spacing: DS.spacingSM) {
+                        Text(category.displayName).font(.headline)
 
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
+                            HStack(spacing: DS.spacingMD) {
                                 ForEach(categoryItems, id: \.id) { item in
-                                    VStack(spacing: 4) {
-                                        ItemThumbnail(item: item, size: 80)
-                                        Text(item.name ?? item.subcategory.capitalized)
+                                    VStack(spacing: DS.spacingXS) {
+                                        ItemThumbnail(item: item, size: 72, showConditionBadge: false)
+                                        Text(item.displayName)
                                             .font(.caption2)
                                             .lineLimit(1)
                                     }
                                 }
                             }
-                            .padding(.horizontal)
                         }
                     }
                 }
 
                 // Combinations
-                VStack(alignment: .leading, spacing: 8) {
-                    let tops = packedItems.filter { $0.category == .top }
-                    let bottoms = packedItems.filter { $0.category == .bottom }
-
-                    if !tops.isEmpty && !bottoms.isEmpty {
-                        Text("Possible Combinations: \(tops.count * bottoms.count)")
+                let tops = packedItems.filter { $0.category == .top }
+                let bottoms = packedItems.filter { $0.category == .bottom }
+                if !tops.isEmpty && !bottoms.isEmpty {
+                    VStack(alignment: .leading, spacing: DS.spacingSM) {
+                        Text("Outfit Combinations")
                             .font(.headline)
-                            .padding(.horizontal)
-
-                        Text("Mix and match your \(tops.count) tops with \(bottoms.count) bottoms")
-                            .font(.caption)
+                        Text("Mix \(tops.count) tops with \(bottoms.count) bottoms = \(tops.count * bottoms.count) outfits")
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal)
                     }
+                    .glassCard()
                 }
             }
-            .padding(.vertical)
+            .padding(DS.spacingLG)
         }
     }
 
     private var checklistView: some View {
         List {
-            ForEach(groupedItems, id: \.0) { category, categoryItems in
+            ForEach(grouped, id: \.0) { category, categoryItems in
                 Section(category.displayName) {
                     ForEach(categoryItems, id: \.id) { item in
-                        ChecklistRow(item: item)
+                        PackingChecklistRow(item: item)
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
     }
 }
 
-struct ChecklistRow: View {
+struct PackingChecklistRow: View {
     let item: WardrobeItem
     @State private var isChecked = false
 
     var body: some View {
-        HStack {
+        HStack(spacing: DS.spacingMD) {
             Button {
                 isChecked.toggle()
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                Haptic.light()
             } label: {
                 Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isChecked ? .green : .secondary)
+                    .font(.title3)
             }
 
-            Text(item.name ?? item.subcategory.capitalized)
+            Text(item.displayName)
                 .strikethrough(isChecked)
                 .foregroundStyle(isChecked ? .secondary : .primary)
 
@@ -384,5 +355,6 @@ struct ChecklistRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .listRowBackground(Color.clear)
     }
 }

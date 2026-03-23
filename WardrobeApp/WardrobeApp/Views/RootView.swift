@@ -1,14 +1,18 @@
 import SwiftUI
+import SwiftData
 
 struct RootView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        if appState.hasCompletedOnboarding {
-            MainTabView()
-        } else {
-            OnboardingFlow()
+        Group {
+            if appState.hasCompletedOnboarding {
+                MainTabView()
+            } else {
+                OnboardingFlow()
+            }
         }
+        .animation(.easeInOut(duration: 0.4), value: appState.hasCompletedOnboarding)
     }
 }
 
@@ -47,5 +51,6 @@ struct MainTabView: View {
                 }
                 .tag(4)
         }
+        .tint(.accentColor)
     }
 }
