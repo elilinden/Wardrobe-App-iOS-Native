@@ -1,0 +1,13 @@
+{
+  "never_combine": [
+    ["formal_shoes", "athletic_shorts"],
+    ["ballgown", "sneakers"],
+    ["swimwear", "blazer"],
+    ["athletic_top", "formal_trousers"]
+  ],
+  "prefer_combine": [
+    ["blazer", "dress_trousers"],
+    ["denim_jeans", "casual_top"],
+    ["sneakers", "casual_bottom"]
+  ]
+}

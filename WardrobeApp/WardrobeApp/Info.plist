@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Wardrobe needs camera access to photograph your clothing items and create your avatar for virtual try-on.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Wardrobe needs photo library access to save try-on renders and import clothing photos.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Wardrobe uses your location to provide weather-appropriate outfit suggestions.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Wardrobe reads your calendar events to suggest appropriate outfits for your day.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Wardrobe reads your calendar events to suggest appropriate outfits for your day.</string>
+	<key>GeminiAPIKey</key>
+	<string>$(GEMINI_API_KEY)</string>
+	<key>PixelcutAPIKey</key>
+	<string>$(PIXELCUT_API_KEY)</string>
+</dict>
+</plist>
