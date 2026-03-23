@@ -21,7 +21,12 @@ struct CalendarEvent: Identifiable {
 class CalendarService: ObservableObject {
     private let eventStore = EKEventStore()
     @Published var todayEvents: [CalendarEvent] = []
-    @Published var hasAccess: Bool = false
+    @Published var hasAccess = false
+
+    private static let workKeywords = [
+        "meeting", "work", "office", "conference", "standup",
+        "review", "interview", "sync", "presentation", "call"
+    ]
 
     func requestAccess() async {
         do {
@@ -33,36 +38,31 @@ class CalendarService: ObservableObject {
             }
             await MainActor.run {
                 self.hasAccess = granted
-                if granted {
-                    self.fetchTodayEvents()
-                }
+                if granted { self.fetchTodayEvents() }
             }
         } catch {
-            await MainActor.run {
-                self.hasAccess = false
-            }
+            await MainActor.run { self.hasAccess = false }
         }
     }
 
     func fetchTodayEvents() {
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        let start = calendar.startOfDay(for: Date())
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }
 
-        let predicate = eventStore.predicateForEvents(withStart: startOfDay, end: endOfDay, calendars: nil)
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nil)
         let events = eventStore.events(matching: predicate)
 
-        let workKeywords = ["meeting", "work", "office", "conference", "standup", "review", "interview"]
-
         todayEvents = events.map { event in
-            let titleLower = event.title.lowercased()
-            let isWork = workKeywords.contains { titleLower.contains($0) }
+            let titleLower = event.title?.lowercased() ?? ""
+            let isWork = Self.workKeywords.contains { titleLower.contains($0) }
             return CalendarEvent(
-                id: event.eventIdentifier,
-                title: event.title,
+                id: event.eventIdentifier ?? UUID().uuidString,
+                title: event.title ?? "Event",
                 startDate: event.startDate,
                 isWorkRelated: isWork
             )
-        }.sorted { $0.startDate < $1.startDate }
+        }
+        .sorted { $0.startDate < $1.startDate }
     }
 }

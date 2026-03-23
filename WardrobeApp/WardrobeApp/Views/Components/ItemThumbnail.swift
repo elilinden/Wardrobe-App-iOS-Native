@@ -22,6 +22,7 @@ struct ItemThumbnail: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: DS.radiusSM))
+        .accessibilityLabel("\(item.displayName), \(item.primaryColor) \(item.category.displayName)")
         .overlay(alignment: .topTrailing) {
             if showConditionBadge && item.condition != .clean {
                 Image(systemName: conditionIcon)

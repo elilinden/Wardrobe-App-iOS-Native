@@ -7,6 +7,7 @@ struct AvatarSetupScreen: View {
     @State private var photos: [AvatarSlot: UIImage] = [:]
     @State private var activeSlot: AvatarSlot?
     @State private var showCamera = false
+    @State private var capturedImage: UIImage?
     @State private var showInfo = false
     @State private var errorMessage: String?
 
@@ -75,14 +76,13 @@ struct AvatarSetupScreen: View {
             .padding(.bottom, 50)
         }
         .sheet(isPresented: $showCamera) {
-            ImagePicker(image: Binding(
-                get: { nil },
-                set: { image in
-                    if let image, let slot = activeSlot {
-                        photos[slot] = image
-                    }
-                }
-            ), sourceType: .camera)
+            ImagePicker(image: $capturedImage, sourceType: .camera)
+        }
+        .onChange(of: capturedImage) { _, newImage in
+            if let newImage, let slot = activeSlot {
+                photos[slot] = newImage
+                capturedImage = nil
+            }
         }
         .alert("Why do we need this?", isPresented: $showInfo) {
             Button("Got it", role: .cancel) {}

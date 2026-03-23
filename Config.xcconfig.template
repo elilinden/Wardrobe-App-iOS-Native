@@ -1,6 +1,23 @@
 // Wardrobe App API Configuration
-// Copy this file to Config.xcconfig and fill in your API keys
-// NEVER commit the actual Config.xcconfig file
+//
+// SETUP:
+//   1. Copy this file to Config.xcconfig
+//   2. Fill in your API keys below
+//   3. In Xcode, set this xcconfig file in your project's build settings
+//   4. NEVER commit Config.xcconfig to version control
+//
+// SECURITY:
+//   - Keys are read from Info.plist at first launch, then stored in the iOS Keychain
+//   - The Keychain entry uses kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+//   - Keys are never logged, transmitted to analytics, or stored in plaintext after migration
+//   - For production builds, consider using a secure server-side proxy instead of
+//     embedding API keys in the client app
+//
+// KEY ROTATION:
+//   1. Update the key value below
+//   2. Clean build (Cmd+Shift+K)
+//   3. Delete app from device to force re-migration
+//   4. Or call APIKeyManager.shared.setGeminiKey("new_key") programmatically
 
 GEMINI_API_KEY = your_gemini_api_key_here
 PIXELCUT_API_KEY = your_pixelcut_api_key_here
