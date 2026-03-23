@@ -302,17 +302,20 @@ struct ClosetView: View {
             .listRowBackground(Color.clear)
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
+                    AppLog.closet.info("Deleting item: \(item.displayName)")
                     item.cleanupPhoto()
                     modelContext.delete(item)
                 } label: { Label("Delete", systemImage: "trash") }
 
                 Button {
+                    AppLog.closet.info("Moving to storage: \(item.displayName)")
                     item.moveToStorage()
                 } label: { Label("Storage", systemImage: "archivebox") }
                     .tint(.blue)
             }
             .swipeActions(edge: .leading) {
                 Button {
+                    AppLog.closet.info("Marking worn: \(item.displayName)")
                     item.markWornToday()
                 } label: { Label("Worn", systemImage: "checkmark.circle") }
                     .tint(.green)
@@ -354,14 +357,21 @@ struct ClosetView: View {
 
     @ViewBuilder
     private func itemContextMenu(_ item: WardrobeItem) -> some View {
-        Button { item.markWornToday() } label: {
+        Button {
+            AppLog.closet.info("Context menu: marking worn \(item.displayName)")
+            item.markWornToday()
+        } label: {
             Label("Mark Worn Today", systemImage: "checkmark.circle")
         }
-        Button { item.moveToStorage() } label: {
+        Button {
+            AppLog.closet.info("Context menu: moving to storage \(item.displayName)")
+            item.moveToStorage()
+        } label: {
             Label("Move to Storage", systemImage: "archivebox")
         }
         Divider()
         Button(role: .destructive) {
+            AppLog.closet.info("Context menu: deleting \(item.displayName)")
             item.cleanupPhoto()
             modelContext.delete(item)
         } label: {

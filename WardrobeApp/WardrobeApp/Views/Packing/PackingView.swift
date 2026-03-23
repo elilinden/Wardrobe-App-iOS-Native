@@ -91,6 +91,7 @@ struct PackingView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         Button(role: .destructive) {
+                            AppLog.packing.info("Deleting trip: \(trip.displayName)")
                             modelContext.delete(trip)
                         } label: { Label("Delete", systemImage: "trash") }
                     }
@@ -186,7 +187,12 @@ struct TripSetupView: View {
         trip.packedItemIDs = suggested.map(\.id)
 
         modelContext.insert(trip)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            AppLog.packing.info("Trip created: \(trip.displayName) with \(suggested.count) items")
+        } catch {
+            AppLog.data.error("Failed to save trip: \(error.localizedDescription)")
+        }
         Haptic.success()
         dismiss()
     }

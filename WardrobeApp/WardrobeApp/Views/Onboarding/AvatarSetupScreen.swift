@@ -2,7 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct AvatarSetupScreen: View {
-    let onContinue: () -> Void
+    var onContinue: (() -> Void)? = nil
+    var onComplete: (() -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
     @State private var photos: [AvatarSlot: UIImage] = [:]
     @State private var activeSlot: AvatarSlot?
@@ -151,12 +152,29 @@ struct AvatarSetupScreen: View {
             }
         }
 
-        let profile = UserProfile()
-        profile.avatarPhotoFileNames = fileNames
-        modelContext.insert(profile)
-        try? modelContext.save()
+        // Check if retaking (profile already exists)
+        let descriptor = FetchDescriptor<UserProfile>()
+        if let existing = try? modelContext.fetch(descriptor).first {
+            existing.avatarPhotoFileNames = fileNames
+            AppLog.ui.info("Avatar photos retaken, \(fileNames.count) photos saved")
+        } else {
+            let profile = UserProfile()
+            profile.avatarPhotoFileNames = fileNames
+            modelContext.insert(profile)
+            AppLog.ui.info("New avatar profile created with \(fileNames.count) photos")
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            AppLog.data.error("Failed to save avatar photos: \(error.localizedDescription)")
+        }
 
         Haptic.success()
-        onContinue()
+        if let onComplete {
+            onComplete()
+        } else {
+            onContinue?()
+        }
     }
 }

@@ -233,13 +233,19 @@ struct TodayView: View {
     }
 
     private func thumbsUp(_ s: OutfitSuggestion) {
+        AppLog.suggestions.info("Thumbs up on suggestion with \(s.items.count) items")
         Haptic.light()
         toastMessage = .success("Noted! We'll suggest more like this")
     }
 
     private func thumbsDown(_ s: OutfitSuggestion) {
+        AppLog.suggestions.info("Thumbs down on suggestion with \(s.items.count) items")
         profile?.addThumbsDown(itemIDs: Set(s.items.map(\.id)))
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            AppLog.data.error("Failed to save thumbs-down: \(error.localizedDescription)")
+        }
         toastMessage = .info("Got it — we'll avoid this combo")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             withAnimation { generateSuggestions() }
@@ -250,7 +256,12 @@ struct TodayView: View {
     private func save(_ s: OutfitSuggestion) {
         let outfit = Outfit(itemIDs: s.items.map(\.id), occasion: selectedOccasion)
         modelContext.insert(outfit)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            AppLog.outfit.info("Outfit saved from Today with \(s.items.count) items")
+        } catch {
+            AppLog.data.error("Failed to save outfit: \(error.localizedDescription)")
+        }
         toastMessage = .success("Outfit saved to Lookbook")
         Haptic.success()
     }

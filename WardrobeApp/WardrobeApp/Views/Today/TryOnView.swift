@@ -222,14 +222,21 @@ struct TryOnView: View {
                     personImage: avatar, garmentImages: garments
                 )
                 profile.incrementRenderCount()
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                    AppLog.api.info("TryOn: Render count incremented")
+                } catch {
+                    AppLog.data.error("TryOn: Failed to save render count: \(error.localizedDescription)")
+                }
 
                 await MainActor.run {
                     renderedImage = result
                     isRendering = false
+                    AppLog.api.info("TryOn: Render completed successfully")
                     Haptic.medium()
                 }
             } catch {
+                AppLog.api.error("TryOn: Render failed: \(error.localizedDescription)")
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isRendering = false
@@ -239,11 +246,22 @@ struct TryOnView: View {
     }
 
     private func saveToLookbook(_ image: UIImage) {
-        let fileName = try? ImageService.shared.saveTryOnRender(image)
+        var fileName: String?
+        do {
+            fileName = try ImageService.shared.saveTryOnRender(image)
+            AppLog.image.info("TryOn render saved: \(fileName ?? "nil")")
+        } catch {
+            AppLog.image.error("Failed to save try-on render: \(error.localizedDescription)")
+        }
         let outfit = Outfit(itemIDs: items.map(\.id))
         outfit.tryOnRenderFileName = fileName
         modelContext.insert(outfit)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            AppLog.outfit.info("Try-on outfit saved to Lookbook")
+        } catch {
+            AppLog.data.error("Failed to save try-on outfit: \(error.localizedDescription)")
+        }
         Haptic.success()
     }
 }

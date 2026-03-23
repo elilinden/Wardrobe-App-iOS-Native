@@ -215,7 +215,12 @@ struct BuilderView: View {
                 Button {
                     let outfit = Outfit(itemIDs: selectedItems.map(\.id), plannedDate: Date())
                     modelContext.insert(outfit)
-                    try? modelContext.save()
+                    do {
+                        try modelContext.save()
+                        AppLog.outfit.info("Outfit added to today with \(selectedItems.count) items")
+                    } catch {
+                        AppLog.data.error("Failed to save outfit to today: \(error.localizedDescription)")
+                    }
                     Haptic.success()
                 } label: {
                     Label("Add to Today", systemImage: "sun.max")
@@ -288,7 +293,12 @@ struct BuilderView: View {
             plannedDate: planned
         )
         modelContext.insert(outfit)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            AppLog.outfit.info("Outfit saved from Builder: \(outfit.displayName)")
+        } catch {
+            AppLog.data.error("Failed to save outfit from Builder: \(error.localizedDescription)")
+        }
         outfitName = ""
         Haptic.success()
     }

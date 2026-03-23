@@ -73,14 +73,17 @@ class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegate {
             let current = weather.currentWeather
             let daily = weather.dailyForecast.first
 
-            return WeatherInfo(
+            let info = WeatherInfo(
                 currentTemp: current.temperature.converted(to: .fahrenheit).value,
                 conditionDescription: current.condition.description,
                 conditionSymbol: current.symbolName,
                 highTemp: daily?.highTemperature.converted(to: .fahrenheit).value ?? 0,
                 lowTemp: daily?.lowTemperature.converted(to: .fahrenheit).value ?? 0
             )
+            AppLog.weather.info("Weather fetched: \(info.conditionDescription), \(Int(info.currentTemp))°F")
+            return info
         } catch {
+            AppLog.weather.error("Weather fetch failed: \(error.localizedDescription)")
             return nil
         }
     }
@@ -95,6 +98,7 @@ class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        AppLog.weather.error("Location failed: \(error.localizedDescription)")
         Task { @MainActor in
             locationError = true
         }

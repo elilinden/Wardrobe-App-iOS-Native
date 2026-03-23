@@ -39,17 +39,23 @@ struct MainTabView: View {
                 }
                 .tag(2)
 
+            ChatView()
+                .tabItem {
+                    Label("Advisors", systemImage: "bubble.left.and.bubble.right")
+                }
+                .tag(3)
+
             LookbookView()
                 .tabItem {
                     Label("Lookbook", systemImage: "book.closed")
                 }
-                .tag(3)
+                .tag(4)
 
             PackingView()
                 .tabItem {
                     Label("Packing", systemImage: "suitcase")
                 }
-                .tag(4)
+                .tag(5)
         }
         .tint(.accentColor)
     }

@@ -37,11 +37,13 @@ class CalendarService: ObservableObject {
             } else {
                 granted = try await eventStore.requestAccess(to: .event)
             }
+            AppLog.calendar.info("Calendar access: \(granted ? "granted" : "denied")")
             await MainActor.run {
                 self.hasAccess = granted
                 if granted { self.fetchTodayEvents() }
             }
         } catch {
+            AppLog.calendar.error("Calendar access error: \(error.localizedDescription)")
             await MainActor.run { self.hasAccess = false }
         }
     }

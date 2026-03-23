@@ -35,10 +35,17 @@ class NotificationService {
         let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
 
-        center.add(request)
+        center.add(request) { error in
+            if let error {
+                AppLog.notifications.error("Failed to schedule morning notification: \(error.localizedDescription)")
+            } else {
+                AppLog.notifications.info("Morning notification scheduled at \(hour):\(minute)")
+            }
+        }
     }
 
     func scheduleEveningReminder(hour: Int, minute: Int) {
+        AppLog.notifications.info("Scheduling evening reminder at \(hour):\(minute)")
         let id = "evening_outfit_reminder"
         center.removePendingNotificationRequests(withIdentifiers: [id])
 
@@ -54,14 +61,20 @@ class NotificationService {
         let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
 
-        center.add(request)
+        center.add(request) { error in
+            if let error {
+                AppLog.notifications.error("Failed to schedule evening reminder: \(error.localizedDescription)")
+            }
+        }
     }
 
     func cancelAll() {
+        AppLog.notifications.info("Cancelling all notifications")
         center.removeAllPendingNotificationRequests()
     }
 
     func cancelMorningSuggestion() {
+        AppLog.notifications.info("Cancelling morning suggestion")
         center.removePendingNotificationRequests(withIdentifiers: ["morning_outfit_suggestion"])
     }
 

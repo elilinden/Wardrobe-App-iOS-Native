@@ -11,7 +11,7 @@ struct OnboardingFlow: View {
             Group {
                 switch currentStep {
                 case 0: WelcomeScreen { currentStep = 1 }
-                case 1: AvatarSetupScreen { currentStep = 2 }
+                case 1: AvatarSetupScreen(onContinue: { currentStep = 2 })
                 case 2: ClosetImportScreen { currentStep = 3 }
                 case 3: StyleBaselineScreen(onFinish: { currentStep = 4 })
                 case 4: WalkthroughView(isPresented: .constant(true)) {

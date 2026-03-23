@@ -278,11 +278,21 @@ struct AddItemSingleView: View {
         )
 
         if let image = capturedImage {
-            try? ImageService.shared.saveItemPhoto(image, fileName: item.photoFileName)
+            do {
+                try ImageService.shared.saveItemPhoto(image, fileName: item.photoFileName)
+                AppLog.image.info("Saved photo for item: \(item.displayName)")
+            } catch {
+                AppLog.image.error("Failed to save photo for item \(item.displayName): \(error.localizedDescription)")
+            }
         }
 
         modelContext.insert(item)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            AppLog.closet.info("Single item added: \(item.displayName) (\(item.category.displayName))")
+        } catch {
+            AppLog.closet.error("Failed to save item: \(error.localizedDescription)")
+        }
         Haptic.success()
 
         // Post notification for toast
@@ -473,6 +483,7 @@ struct AddItemBatchView: View {
 
     private func saveItems() {
         let selected = detectedItems.filter(\.isSelected)
+        AppLog.closet.info("Batch save: \(selected.count) items selected")
         for d in selected {
             let item = WardrobeItem(
                 category: d.category,
@@ -482,10 +493,19 @@ struct AddItemBatchView: View {
                 materialEstimate: d.material,
                 formality: d.formality
             )
-            try? ImageService.shared.saveItemPhoto(d.image, fileName: item.photoFileName)
+            do {
+                try ImageService.shared.saveItemPhoto(d.image, fileName: item.photoFileName)
+            } catch {
+                AppLog.image.error("Batch: failed to save photo for \(item.displayName): \(error.localizedDescription)")
+            }
             modelContext.insert(item)
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            AppLog.closet.info("Batch save completed: \(selected.count) items saved")
+        } catch {
+            AppLog.closet.error("Batch save failed: \(error.localizedDescription)")
+        }
         Haptic.success()
         NotificationCenter.default.post(name: .itemAdded, object: "\(selected.count) items")
         dismiss()

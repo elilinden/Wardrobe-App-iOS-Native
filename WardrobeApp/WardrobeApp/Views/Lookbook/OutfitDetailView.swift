@@ -67,8 +67,14 @@ struct OutfitDetailView: View {
                     // Actions
                     VStack(spacing: DS.spacingMD) {
                         Button {
+                            AppLog.outfit.info("Marking outfit worn: \(outfit.displayName)")
                             outfit.markWorn(items: outfitItems)
-                            try? modelContext.save()
+                            do {
+                                try modelContext.save()
+                                AppLog.outfit.info("Outfit wear logged successfully")
+                            } catch {
+                                AppLog.data.error("Failed to save wear log: \(error.localizedDescription)")
+                            }
                         } label: {
                             Label("Wear Again", systemImage: "arrow.clockwise")
                         }
@@ -81,6 +87,7 @@ struct OutfitDetailView: View {
 
                         Button {
                             outfit.isFavorite.toggle()
+                            AppLog.outfit.info("Outfit \(outfit.displayName) favorite: \(outfit.isFavorite)")
                             Haptic.light()
                         } label: {
                             Label(

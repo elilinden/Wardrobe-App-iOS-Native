@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var showDeleteConfirmation = false
     @State private var showStyleBaseline = false
     @State private var showWalkthrough = false
+    @State private var showAvatarRetake = false
     @State private var isRetagging = false
     @State private var retagProgress = 0
     @State private var retagTotal = 0
@@ -59,6 +60,16 @@ struct SettingsView: View {
             }
             .fullScreenCover(isPresented: $showWalkthrough) {
                 WalkthroughView(isPresented: $showWalkthrough)
+            }
+            .sheet(isPresented: $showAvatarRetake) {
+                NavigationStack {
+                    AvatarSetupScreen(onComplete: { showAvatarRetake = false })
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Cancel") { showAvatarRetake = false }
+                            }
+                        }
+                }
             }
         }
     }
@@ -181,7 +192,8 @@ struct SettingsView: View {
                 }
             }
             Button("Retake Avatar Photos") {
-                // Would relaunch avatar setup
+                AppLog.ui.info("Settings: retake avatar photos")
+                showAvatarRetake = true
             }
         }
         .listRowBackground(Color(.systemBackground).opacity(0.5))
@@ -432,8 +444,12 @@ struct SettingsView: View {
     }
 
     private func exportData() {
+        AppLog.data.info("Starting data export")
         let descriptor = FetchDescriptor<WardrobeItem>()
-        guard let items = try? modelContext.fetch(descriptor) else { return }
+        guard let items = try? modelContext.fetch(descriptor) else {
+            AppLog.data.error("Export: failed to fetch items")
+            return
+        }
 
         struct Export: Codable {
             let name: String?; let brand: String?; let category: String
@@ -459,31 +475,44 @@ struct SettingsView: View {
         encoder.outputFormatting = .prettyPrinted
         encoder.dateEncodingStrategy = .iso8601
 
-        if let data = try? encoder.encode(exportItems) {
+        do {
+            let data = try encoder.encode(exportItems)
             let url = FileStorage.itemPhotosDirectory
                 .deletingLastPathComponent()
                 .appendingPathComponent("wardrobe_export.json")
-            try? data.write(to: url)
+            try data.write(to: url)
+            AppLog.data.info("Export successful: \(items.count) items to \(url.lastPathComponent)")
             Haptic.success()
+        } catch {
+            AppLog.data.error("Export failed: \(error.localizedDescription)")
         }
     }
 
     private func deleteAllData() {
+        AppLog.data.warning("Deleting all user data")
         profile?.cleanupAllPhotos()
-        try? modelContext.delete(model: WardrobeItem.self)
-        try? modelContext.delete(model: Outfit.self)
-        try? modelContext.delete(model: PackingTrip.self)
-        try? modelContext.delete(model: UserProfile.self)
+        do {
+            try modelContext.delete(model: WardrobeItem.self)
+            try modelContext.delete(model: Outfit.self)
+            try modelContext.delete(model: PackingTrip.self)
+            try modelContext.delete(model: UserProfile.self)
+            AppLog.data.info("All model data deleted")
+        } catch {
+            AppLog.data.error("Failed to delete model data: \(error.localizedDescription)")
+        }
         ImageCache.shared.clearAll()
         NotificationService.shared.cancelAll()
         UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        AppLog.data.info("All data deletion complete")
         Haptic.medium()
     }
 
     private func retagAllItems() {
+        AppLog.closet.info("Starting retag of all items")
         isRetagging = true
         let descriptor = FetchDescriptor<WardrobeItem>()
         guard let items = try? modelContext.fetch(descriptor) else {
+            AppLog.closet.error("Retag: failed to fetch items")
             isRetagging = false
             return
         }
@@ -493,10 +522,18 @@ struct SettingsView: View {
 
         Task {
             let gemini = GeminiVisionService()
-            for (i, item) in items.enumerated() {
-                guard let image = ImageCache.shared.load(from: item.photoURL) else { continue }
+            var successCount = 0
+            var failCount = 0
 
-                if let result = try? await gemini.tagSingleItem(image: image) {
+            for (i, item) in items.enumerated() {
+                guard let image = ImageCache.shared.load(from: item.photoURL) else {
+                    AppLog.closet.debug("Retag: skipping item \(i+1) — no image")
+                    failCount += 1
+                    continue
+                }
+
+                do {
+                    let result = try await gemini.tagSingleItem(image: image)
                     await MainActor.run {
                         item.category = Category(rawValue: result.category) ?? item.category
                         item.subcategory = result.subcategory
@@ -508,16 +545,27 @@ struct SettingsView: View {
                         item.seasons = result.season.compactMap { Season(rawValue: $0) }
                         retagProgress = i + 1
                     }
+                    successCount += 1
+                } catch {
+                    AppLog.closet.error("Retag: failed for item \(i+1): \(error.localizedDescription)")
+                    failCount += 1
                 }
 
                 // Batch save every 10 items
                 if (i + 1) % 10 == 0 {
-                    await MainActor.run { try? modelContext.save() }
+                    await MainActor.run {
+                        do { try modelContext.save() } catch {
+                            AppLog.data.error("Retag batch save failed at item \(i+1): \(error.localizedDescription)")
+                        }
+                    }
                 }
             }
 
+            AppLog.closet.info("Retag completed: \(successCount) success, \(failCount) failed")
             await MainActor.run {
-                try? modelContext.save()
+                do { try modelContext.save() } catch {
+                    AppLog.data.error("Retag final save failed: \(error.localizedDescription)")
+                }
                 isRetagging = false
                 Haptic.success()
             }

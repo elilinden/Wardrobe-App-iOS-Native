@@ -9,6 +9,7 @@ enum LookbookFilter: String, CaseIterable {
 
 struct LookbookView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
     @Query(sort: \Outfit.createdDate, order: .reverse) private var outfits: [Outfit]
     @Query private var items: [WardrobeItem]
 
@@ -42,7 +43,10 @@ struct LookbookView: View {
                     EmptyStateView(
                         icon: "book.closed",
                         title: "Save outfits here",
-                        subtitle: "Build and save outfits for inspiration later."
+                        subtitle: "Build and save outfits for inspiration later.",
+                        illustration: .emptyLookbook,
+                        actionTitle: "Create Outfit",
+                        action: { appState.selectedTab = 2 }
                     )
                 } else {
                     ScrollView {
@@ -64,6 +68,7 @@ struct LookbookView: View {
                                             )
                                         }
                                         Button(role: .destructive) {
+                                            AppLog.outfit.info("Deleting outfit: \(outfit.displayName)")
                                             outfit.cleanupRender()
                                             modelContext.delete(outfit)
                                         } label: {
